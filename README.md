@@ -277,3 +277,18 @@ Manual alternative:
 ```bash
 rm -rf data/raw data/processed data/index/chroma data/datasets models/adapters models/merges outputs
 ```
+
+## Notes and trade-offs
+
+- Apple Silicon focus: Uses MLX; training and inference are optimized for M-series hardware.
+- Model download: Base model is pulled by mlx_lm on first use (Hugging Face cache). Large initial download; slow networks may appear “stuck” while fetching big .safetensors shards.
+- Embeddings run on CPU by default; indexing speed depends on MiniLM and CPU throughput.
+- Crawler respects robots.txt and is constrained to learn.microsoft.com/en-us/defender-endpoint.
+- No formal unit tests included yet; logging is verbose and aids manual validation.
+
+## Known issues / risks
+
+- Long first-time model download (multi-GB). Reviewers may want to:
+  - Ensure enough disk space and stable network.
+  - Optionally set HF cache env (e.g., HF_HOME) if custom caching is needed.
+- If mlx_lm API changes, adapter loading falls back to merged/base; guarded with try/except in inference/generate.py.
