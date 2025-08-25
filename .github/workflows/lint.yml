@@ -9,8 +9,8 @@ on:
       - "**"
 
 jobs:
-  pre-commit:
-    name: Run linters (Python + Shell)
+  python-and-shell-lint:
+    name: Python (ruff) and Shell (shfmt + shellcheck)
     runs-on: ubuntu-latest
 
     steps:
@@ -22,7 +22,31 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Run pre-commit on all files
-        uses: pre-commit/action@v3.0.1
-        with:
-          extra_args: --all-files
+      - name: Install Python linter
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff
+
+      - name: Ruff (Python)
+        run: |
+          ruff version
+          ruff check .
+
+      - name: Install Shell linters
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          sudo curl -sSLo /usr/local/bin/shfmt https://github.com/mvdan/sh/releases/download/v3.7.0/shfmt_v3.7.0_linux_amd64
+          sudo chmod +x /usr/local/bin/shfmt
+          shfmt -version
+          shellcheck --version
+
+      - name: shfmt (Shell formatting check)
+        run: |
+          # Check formatting (fails with diff if formatting is needed)
+          shfmt -d -i 2 -ci -s .
+
+      - name: shellcheck (Static analysis)
+        run: |
+          # Analyze only shell files shfmt recognizes; noop if none
+          shfmt -f . | xargs -r shellcheck -x
