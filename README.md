@@ -4,6 +4,33 @@ End-to-end local RAG + LoRA fine-tuning pipeline for Microsoft Defender for Endp
 
 Public documentation: https://learn.microsoft.com/en-us/defender-endpoint/
 
+## Table of Contents
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quickstart](#quickstart)
+- [Pipeline & CLI Reference](#pipeline--cli-reference)
+- [CLI Help](#cli-help)
+- [Run Modes](#run-modes)
+- [Programmatic Inference (Python)](#programmatic-inference-python)
+- [Customize Streamlit Server](#customize-streamlit-server)
+- [Common Workflows](#common-workflows)
+- [Background Updates and HTTP /update](#background-updates-and-http-update)
+- [Logging](#logging)
+- [Clean / Reset](#clean--reset)
+- [Configuration](#configuration)
+- [Artifacts & Paths](#artifacts--paths)
+- [Data Formats](#data-formats)
+- [Configuration Tips](#configuration-tips)
+- [Environment variables](#environment-variables)
+- [Customize Crawl Target](#customize-crawl-target)
+- [Repository Structure](#repository-structure)
+- [Known Limitations](#known-limitations)
+- [Troubleshooting](#troubleshooting)
+- [Performance Tips](#performance-tips)
+- [FAQ](#faq)
+- [Key Concepts, Links, and Acknowledgments](#key-concepts-links-and-acknowledgments)
+
 ## Features
 
 - Crawler: robots-aware and constrained to `learn.microsoft.com/en-us/defender-endpoint`
@@ -22,6 +49,15 @@ Runs fully offline after initial downloads. Base model is retrieved on first use
 - Python 3.10+
 - Sufficient disk space for model, index, and datasets
 - Xcode Command Line Tools recommended for building some wheels
+
+## Support Matrix
+| Component | Supported |
+|----------|-----------|
+| OS       | macOS (Apple Silicon M1/M2/M3) |
+| Python   | 3.10+ |
+| CPU/GPU  | CPU inference; MLX utilizes Apple Silicon accelerators |
+| RAM      | 8 GB+ recommended |
+| Disk     | 15–25 GB free for models, index, datasets (first run) |
 
 ## Installation
 
@@ -93,11 +129,77 @@ Debug logging:
 LOG_LEVEL=DEBUG python -m streamlit run src/app/app.py
 ```
 
+### CLI Help
+```bash
+python -m src.main -h
+python -m src.main crawl -h
+```
+
 ### Adapter Loading Order (Inference)
 
 1) Load LoRA adapter from `finetune.out_dir` if present  
 2) Else use merged weights from `merge.out_dir`  
 3) Else fall back to `model.base_id`
+
+### Run Modes
+- rag — Retrieve top-k docs and prompt the base model.
+- ft — Use the fine-tuned model only (no retrieval).
+- rag_ft — Retrieve top-k docs and use the fine-tuned model.
+
+### Programmatic Inference (Python)
+
+Use the model runner directly from Python:
+```python
+from src.inference.generate import ModelRunner
+
+runner = ModelRunner(mode="rag_ft")  # "rag", "ft", or "rag_ft"
+query = "How do I onboard macOS devices to MDE?"
+stream, sources = runner.generate(query, stream=True)  # stream=False returns full text
+answer = "".join(tok for tok in stream)
+print(answer)
+for s in sources or []:
+    print(f"[{s.get('rank')}] {s.get('title')} -> {s.get('url')} (distance={s.get('distance')})")
+```
+
+### Sample Queries
+
+- How do I onboard macOS devices to MDE?
+- What are prerequisites for endpoint detection on macOS?
+- How do I configure tamper protection?
+- Which network URLs must be allowed for MDE service connectivity?
+
+### Customize Streamlit Server
+
+Override host/port when running Streamlit:
+```bash
+python -m streamlit run src/app/app.py --server.address 0.0.0.0 --server.port 8502
+```
+
+## Common Workflows
+
+- RAG only (no training):
+  - Commands:
+    ```bash
+    python -m src.main crawl
+    python -m src.main process
+    python -m src.main index
+    python -m src.main app
+    ```
+  - Or set `app.mode: rag` in `configs/config.yaml`.
+
+- Fine-tuned only (ft):
+  - Commands:
+    ```bash
+    python -m src.main prepare-dataset
+    python -m src.main finetune
+    python -m src.main app
+    ```
+
+- Hybrid (rag_ft):
+  - Ensure index and fine-tuned weights exist, then:
+    ```bash
+    python -m src.main app
+    ```
 
 
 ## Background Updates and HTTP /update
@@ -266,6 +368,61 @@ Notes:
 - If fine-tuned adapters or merged weights are found, the app overrides a default `rag` mode to `rag_ft`.
 - Sidebar shows non-interactive knobs sourced from config: retrieval_top_k, max_tokens, temperature.
 
+## Artifacts & Paths
+
+- data/raw/html — raw crawled pages
+- data/processed — processed artifacts (chunks.jsonl, urls.json, last_update.json)
+- data/index/chroma — Chroma persistent index
+- data/datasets — generated training datasets
+- models/adapters/... — LoRA adapter weights (finetune.out_dir)
+- models/merges/... — merged full weights (merge.out_dir)
+- outputs/ — optional logs when piping command output
+
+Use Clean / Reset above to start fresh.
+
+## Data Formats
+
+- data/processed/chunks.jsonl
+  - One JSON object per line with keys: `title` (str), `url` (str), `text` (str).
+- data/datasets/finetune.*.jsonl
+  - One JSON object per line: `{"text": "..."}`
+  - Prepared for continual pretraining from processed chunks.
+
+## Configuration Tips
+
+- Change base model: edit `configs/config.yaml` → `model.base_id`.
+- Adjust generation and retrieval: `infer.max_tokens`, `infer.temperature`, `infer.retrieval_top_k`.
+- Switch default UI mode: `app.mode` (overrides to `rag_ft` if fine-tuned weights are found).
+- Enable/disable background updates: `update.enabled` (and tweak `api_host`, `api_port`, `min_interval_hours`).
+- Streamlit port/host: `app.host` (default 0.0.0.0), `app.port` (default 8501).
+- Update API: `update.api_host` (default 127.0.0.1), `update.api_port` (default 8799).
+
+### Environment variables
+
+- LOG_LEVEL — controls logging verbosity (INFO by default). Examples:
+  ```bash
+  LOG_LEVEL=DEBUG python -m src.main index
+  LOG_LEVEL=DEBUG python -m streamlit run src/app/app.py
+  ```
+
+## Customize Crawl Target
+
+To adapt the pipeline to a different documentation site, update these keys in `configs/config.yaml` and rerun the pipeline (crawl → process → index):
+```yaml
+crawl:
+  base_url: https://example.com/docs/
+  allowed_domain: example.com
+  allowed_path_prefix: /docs
+  same_language_only: true
+  exclude_url_patterns: ["?view="]
+```
+Then run:
+```bash
+python -m src.main crawl
+python -m src.main process
+python -m src.main index
+```
+
 ## Repository Structure
 
 ```text
@@ -294,12 +451,76 @@ src/
 requirements.txt
 ```
 
+## Security & Privacy
+
+- Runs fully local after initial model/downloads; no external telemetry is sent by this project.
+- Crawler respects robots.txt and is constrained via `configs/config.yaml` (domain and path prefix).
+- The update HTTP server binds to `127.0.0.1` by default; avoid exposing it publicly or add network controls.
+- Review third‑party dependencies in `requirements.txt` before production use.
+
+## Known Limitations
+
+- macOS Apple Silicon focus; not tested on Intel macOS or Windows.
+- First run downloads multi-GB model shards; requires stable network and ample disk space.
+- MiniLM embeddings run on CPU; retrieval speed depends on CPU throughput.
+- Streamlit is single-process; long background updates can momentarily affect responsiveness.
+- Upstream `mlx_lm` APIs may change; fallbacks exist but pin versions if necessary.
+
 ## Troubleshooting
 
 - First run downloads multi-GB model shards. Ensure stable network and disk space. Progress may appear stalled during large downloads.
 - If embeddings are slow, remember MiniLM runs on CPU by default; overall speed depends on CPU throughput.
 - If mlx_lm APIs change, inference falls back to merged/base weights per guards in `src/inference/generate.py`.
 - If Streamlit fails to start, check that your venv is active and port 8501 is free; try `python -m src.main app`.
+
+## Performance Tips
+
+- Retrieval: lower `infer.retrieval_top_k` (e.g., 3–5) to reduce retrieval and generation latency.
+- Generation: reduce `infer.max_tokens` and set lower `infer.temperature` for faster, more deterministic outputs.
+- Indexing: decrease `index.embedding_batch` if you hit memory pressure; increase it to speed up on larger CPUs.
+- Training: tune `finetune.batch_size` and `finetune.accumulate_steps` based on memory; fewer epochs for quick iterations.
+- App: set `update.enabled: false` to avoid background work during demos.
+
+## Reproducibility
+
+- Set a fixed seed in `configs/config.yaml` → `project.seed` (default 42).
+- Capture exact package set:
+  ```bash
+  python --version
+  pip freeze > requirements-lock.txt
+  ```
+- Prefer consistent hardware (same Apple Silicon gen) for comparable timings.
+
+## FAQ
+
+- Chroma collection not found:
+  - Error like "collection 'defender-endpoint' not found". Run:
+    ```bash
+    python -m src.main index
+    ```
+- Port 8501 in use:
+  - Start Streamlit on another port:
+    ```bash
+    python -m streamlit run src/app/app.py --server.port 8502
+    ```
+- Update endpoint returns 429:
+  - Respecting `min_interval_hours`. Use the sidebar "Run update now" button (forces) or wait for the window.
+- Start from a clean slate:
+  - Reset artifacts and rebuild:
+    ```bash
+    chmod +x scripts/clean_reset.sh
+    ./scripts/clean_reset.sh --yes
+    python -m src.main crawl
+    python -m src.main process
+    python -m src.main index
+    ```
+
+## Contributing
+
+- Use Python 3.10+ and create a virtualenv.
+- Before opening a PR, run tests and linters:
+  - Lint: `ruff check .`
+- Keep README and config tables in sync with code changes.
 
 ## Key Concepts, Links, and Acknowledgments
 
