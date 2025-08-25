@@ -1,157 +1,122 @@
 # MDE.Learn.Chatbot
 
-Local end-to-end RAG + LoRA fine-tuning pipeline for Microsoft Defender for Endpoint (MDE) docs:
-- Crawls and cleans MDE docs
-- Chunks and builds a vector index (Chroma + Sentence-Transformers)
-- Fine-tunes Qwen2.5-7B-Instruct-4bit on Apple Silicon with MLX + LoRA
-- Serves a Streamlit chatbot with modes: rag | ft | rag_ft
-- Optional background update service with HTTP /update
-
-Runs fully on macOS Apple Silicon. Base model downloads locally on first use.
+End-to-end local RAG + LoRA fine-tuning pipeline for Microsoft Defender for Endpoint (MDE) docs on Apple Silicon. It crawls the official docs, builds a vector index, fine-tunes Qwen2.5 with MLX + LoRA, and serves a Streamlit chatbot with modes: rag | ft | rag_ft.
 
 Public documentation: https://learn.microsoft.com/en-us/defender-endpoint/
 
 ## Features
 
-- Crawler: robots-aware, domain/path constrained to MDE docs
-- Processing: HTML → clean text → chunking
-- Indexing: persistent Chroma store with MiniLM embeddings
-- Training: MLX LoRA finetuning + optional merge to standalone weights
-- Inference: adapter-first loading with fallback to merged or base
+- Crawler: robots-aware and constrained to `learn.microsoft.com/en-us/defender-endpoint`
+- Processing: HTML → clean text → chunking with overlap
+- Indexing: Chroma persistent store + MiniLM embeddings
+- Training: MLX LoRA fine-tuning, optional merge to standalone weights
+- Inference: adapter-first loading, fallback to merged or base
 - App: Streamlit UI with token streaming and source attributions
-- Auto-updates: scheduled pipeline + HTTP trigger
+- Auto-updates: scheduled pipeline and HTTP trigger (`POST /update`)
 
-## Key Concepts and Links
-
-- MLX: Apple’s array framework optimized for Apple Silicon. [Docs](https://ml-explore.github.io/mlx/) • [GitHub](https://github.com/ml-explore/mlx)
-- mlx-lm: Utilities for running/fine-tuning LLMs with MLX. [Repo](https://github.com/ml-explore/mlx-examples/tree/main/llms) • [PyPI](https://pypi.org/project/mlx-lm/)
-- LoRA: Low-Rank Adaptation for efficient fine-tuning of large models. [Paper](https://arxiv.org/abs/2106.09685)
-- RAG: Retrieval-Augmented Generation to ground answers in external knowledge. [Paper](https://arxiv.org/abs/2005.11401)
-- Chroma: Open-source vector database used for indexing and retrieval. [Docs](https://docs.trychroma.com/)
-- Sentence-Transformers: Embedding models for semantic search. [Website](https://www.sbert.net/) • [GitHub](https://github.com/UKPLab/sentence-transformers)
-- Qwen2.5-7B-Instruct: Instruction-tuned base model. [Hugging Face](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct)
-- Qwen2.5-7B-Instruct-4bit (MLX): Quantized variant used locally. [Hugging Face](https://huggingface.co/mlx-community/Qwen2.5-7B-Instruct-4bit)
-- Streamlit: App framework for data/ML apps. [Website](https://streamlit.io/) • [Docs](https://docs.streamlit.io/)
-
-## Repository Structure
-
-```text
-configs/
-  config.yaml
-  prompts/
-    system.txt
-data/                       # generated; gitignored
-models/                     # adapters/merges; gitignored
-outputs/                    # optional logs; gitignored
-scripts/
-  setup_initial.sh          # crawl → process → index → prepare dataset
-  finetune_and_merge.sh     # finetune → merge
-src/
-  app/app.py                # Streamlit UI
-  app/updater.py            # background updater + HTTP /update
-  crawler/crawler.py        # crawler
-  processing/process.py     # cleaning + chunking
-  indexing/build_index.py   # build Chroma index
-  inference/retriever.py    # retrieve context
-  inference/generate.py     # load model and generate
-  training/prepare_dataset.py
-  training/finetune_mlx.py
-  utils/config.py
-  main.py                   # unified CLI entrypoint
-requirements.txt
-```
+Runs fully offline after initial downloads. Base model is retrieved on first use and cached locally.
 
 ## Requirements
 
-- macOS on Apple Silicon (M-series)
+- macOS with Apple Silicon (M-series)
 - Python 3.10+
-- Disk space for model, index, datasets
-- Xcode Command Line Tools recommended for wheels
+- Sufficient disk space for model, index, and datasets
+- Xcode Command Line Tools recommended for building some wheels
 
 ## Installation
 
 Create and activate a virtual environment:
 ```bash
-# bash
 python -m venv .venv
 source .venv/bin/activate
 ```
 
-Upgrade packaging tools:
+Upgrade packaging tools and install dependencies:
 ```bash
-# bash
 pip install -U pip setuptools wheel
-```
-
-Install dependencies:
-```bash
-# bash
 pip install -r requirements.txt
 ```
 
 ## Quickstart
 
-Run from the repo root with your virtual environment active.
-
-Setup → Train → Run (using scripts):
+One-time setup → fine-tune → launch app:
 ```bash
-# bash
 chmod +x scripts/setup_initial.sh scripts/finetune_and_merge.sh
 ./scripts/setup_initial.sh
 ./scripts/finetune_and_merge.sh
 python -m streamlit run src/app/app.py
 ```
 
-Python-only alternative (CLI entrypoint):
+Python-only CLI alternative:
 ```bash
-# bash
 python -m src.main crawl
 python -m src.main process
 python -m src.main index
 python -m src.main prepare-dataset
 python -m src.main finetune
-python -m src.main merge   # optional
-python -m src.main app     # starts Streamlit
+python -m src.main merge    # optional
+python -m src.main app      # starts Streamlit
 ```
 
 App URL (default): http://localhost:8501  
 Modes: `rag`, `ft`, `rag_ft`.
 
-## Pipeline: Crawl → Process → Index → Dataset → Finetune
+## CLI Reference
 
-1) Crawl (fetch raw HTML and URL manifest based on `configs.crawl`)
+Entrypoint: `python -m src.main [--debug] <command>`
+
+Commands:
+- `crawl` — Crawl MDE docs
+- `process` — Convert HTML to clean text chunks
+- `index` — Build Chroma index
+- `prepare-dataset` — Create JSONL dataset for fine-tuning
+- `finetune` — Run MLX LoRA fine-tuning
+- `merge` — Merge LoRA adapters into standalone weights
+- `app` — Start Streamlit app
+
+Examples:
 ```bash
-# bash
+python -m src.main --debug crawl
+python -m src.main index
+python -m src.main app
+```
+
+Debug logging can also be enabled with `LOG_LEVEL=DEBUG`:
+```bash
+LOG_LEVEL=DEBUG python -m streamlit run src/app/app.py
+```
+
+## Pipeline
+
+Crawl → Process → Index → Dataset → Finetune
+
+1) Crawl (fetch raw HTML and URL manifest)
+```bash
 python -m src.crawler.crawler
 ```
 
-2) Process (parse HTML, clean text, and chunk)
+2) Process (parse HTML, clean text, chunk)
 ```bash
-# bash
 python -m src.processing.process
 ```
 
-3) Index (embed chunks and build a persistent Chroma index)
+3) Index (embed chunks, build persistent Chroma index)
 ```bash
-# bash
 python -m src.indexing.build_index
 ```
 
-4) Dataset (create JSONL text for continual pretraining)
+4) Dataset (JSONL text for continual pretraining)
 ```bash
-# bash
 python -m src.training.prepare_dataset
 ```
 
-5) Finetune (MLX LoRA finetuning; adapters saved under `models/adapters/...`)
+5) Finetune (MLX LoRA; adapters saved under `models/adapters/...`)
 ```bash
-# bash
 python -m src.training.finetune_mlx
 ```
 
 Optional: merge LoRA into standalone weights
 ```bash
-# bash
 python -m src.training.finetune_mlx --merge-only
 ```
 
@@ -163,76 +128,62 @@ python -m src.training.finetune_mlx --merge-only
 
 ## Background Updates and HTTP /update
 
-If `update.enabled: true`, the app starts:
+If `update.enabled: true`, the app runs:
 - an HTTP server at `update.api_host:update.api_port` (accepts `POST /update`)
-- a scheduler that enforces `min_interval_hours` using `last_run_file`
+- a scheduler enforcing `min_interval_hours` via `last_run_file`
 
 On update, the pipeline runs: Crawl → Process → Index → Prepare dataset → Finetune.
 
 Manual trigger while the app is running:
 ```bash
-# bash
 curl -X POST http://127.0.0.1:8799/update
 ```
 
-- Auto-trigger: If no fine-tuned weights exist, the app auto-triggers a fine-tune once.
+Behavior:
+- If no fine-tuned weights exist, the app auto-triggers a fine-tune once.
 - If an update is too soon or already running, server returns 429.
-- Accepted requests return 202 and log progress lines prefixed with `[app.updater]`.
+- Accepted requests return 202 and stream progress logs prefixed with `[app.updater]`.
 
 ## Logging
 
-Default log level is INFO.
+Default level: INFO.
 
-Enable DEBUG logs:
+Enable DEBUG:
 ```bash
-# bash
-# Shell scripts:
 ./scripts/setup_initial.sh --debug
 ./scripts/finetune_and_merge.sh --debug
 
-# Python CLI entrypoint:
 python -m src.main --debug crawl
 python -m src.main --debug process
 python -m src.main --debug index
 python -m src.main --debug prepare-dataset
 python -m src.main --debug finetune
 python -m src.main --debug merge
-
-# Environment variable (works with Streamlit too):
-LOG_LEVEL=DEBUG python -m streamlit run src/app/app.py
 ```
 
-To persist logs, redirect output:
+Persist logs:
 ```bash
-# bash
 ./scripts/setup_initial.sh --debug | tee outputs/setup_initial.log
 ```
 
 ## Clean / Reset
 
-Warning: removes generated artifacts.
+Removes generated artifacts. Use with care.
 
 Recommended:
 ```bash
-# bash
 chmod +x scripts/clean_reset.sh
 ./scripts/clean_reset.sh --yes
 ```
 
-Options:
-- `--dry-run` to preview deletions
-- `--debug` for verbose output
-- `--yes` to skip confirmation
-
 Manual alternative:
 ```bash
-# bash
 rm -rf data/raw data/processed data/index/chroma data/datasets models/adapters models/merges outputs
 ```
 
 ## Configuration
 
-Primary settings live in `configs/config.yaml`. The tables below summarize defaults and describe each field.
+Primary settings in `configs/config.yaml`. Summary:
 
 Project
 | Key  | Default           | Description                                   |
@@ -291,19 +242,19 @@ Model
 | system_prompt_path | configs/prompts/system.txt            | Path to system prompt used during inference.       |
 
 Finetune
-| Key           | Default                            | Description                                  |
-|---------------|------------------------------------|----------------------------------------------|
-| out_dir       | models/adapters/qwen2_5_mde_lora   | Output directory for LoRA adapters.          |
-| epochs        | 1                                  | Number of training epochs.                   |
-| batch_size    | 1                                  | Micro-batch size per step.                   |
-| accumulate_steps | 32                              | Gradient accumulation steps.                  |
-| lr            | 1.0e-5                             | Learning rate.                               |
-| lora.enabled  | true                               | Enable LoRA adapters.                        |
-| lora.r        | 16                                 | LoRA rank.                                   |
-| lora.alpha    | 32                                 | LoRA alpha scaling factor.                   |
-| lora.dropout  | 0.05                               | LoRA dropout probability.                    |
-| val_ratio     | 0.05                               | Fraction of data reserved for validation.    |
-| max_train_samples | null                           | Limit training samples (null = use all).     |
+| Key              | Default                          | Description                                  |
+|------------------|----------------------------------|----------------------------------------------|
+| out_dir          | models/adapters/qwen2_5_mde_lora | Output directory for LoRA adapters.          |
+| epochs           | 1                                | Number of training epochs.                   |
+| batch_size       | 1                                | Micro-batch size per step.                   |
+| accumulate_steps | 32                               | Gradient accumulation steps.                 |
+| lr               | 1.0e-5                           | Learning rate.                               |
+| lora.enabled     | true                             | Enable LoRA adapters.                        |
+| lora.r           | 16                               | LoRA rank.                                   |
+| lora.alpha       | 32                               | LoRA alpha scaling factor.                   |
+| lora.dropout     | 0.05                             | LoRA dropout probability.                    |
+| val_ratio        | 0.05                             | Fraction of data reserved for validation.    |
+| max_train_samples| null                             | Limit training samples (null = use all).     |
 
 Merge
 | Key    | Default                          | Description                               |
@@ -327,13 +278,13 @@ App
 | mode | rag_ft  | Run mode: rag, ft, or rag_ft.      |
 
 Update
-| Key                | Default                           | Description                                                  |
-|--------------------|-----------------------------------|--------------------------------------------------------------|
-| enabled            | true                              | Enable background updater service.                           |
-| api_host           | 127.0.0.1                         | HTTP host for update endpoint.                               |
-| api_port           | 8799                              | HTTP port for update endpoint.                               |
-| min_interval_hours | 24                                | Minimum hours between allowed update runs.                   |
-| last_run_file      | data/processed/last_update.json   | File storing last update timestamp/metadata.                 |
+| Key                | Default                         | Description                                                  |
+|--------------------|---------------------------------|--------------------------------------------------------------|
+| enabled            | true                            | Enable background updater service.                           |
+| api_host           | 127.0.0.1                       | HTTP host for update endpoint.                               |
+| api_port           | 8799                            | HTTP port for update endpoint.                               |
+| min_interval_hours | 24                              | Minimum hours between allowed update runs.                   |
+| last_run_file      | data/processed/last_update.json | File storing last update timestamp/metadata.                 |
 
 System prompt: `configs/prompts/system.txt`.
 
@@ -341,14 +292,59 @@ Notes:
 - If fine-tuned adapters or merged weights are found, the app overrides a default `rag` mode to `rag_ft`.
 - Sidebar shows non-interactive knobs sourced from config: retrieval_top_k, max_tokens, temperature.
 
-## Notes and trade-offs
+## Repository Structure
 
-- Apple Silicon focus: Uses MLX; training and inference are optimized for M-series hardware.
-- Model download: Base model is pulled by mlx_lm on first use (Hugging Face cache). Large initial download; slow networks may appear “stuck” while fetching large shards.
-- Embeddings run on CPU by default; indexing speed depends on MiniLM and CPU throughput.
-- Crawler respects robots.txt and is constrained to `learn.microsoft.com/en-us/defender-endpoint`.
+```text
+configs/
+  config.yaml
+  prompts/
+    system.txt
+data/                       # generated; gitignored
+models/                     # adapters/merges; gitignored
+outputs/                    # optional logs; gitignored
+scripts/
+  setup_initial.sh          # crawl → process → index → prepare dataset
+  finetune_and_merge.sh     # finetune → merge
+src/
+  app/app.py                # Streamlit UI
+  app/updater.py            # background updater + HTTP /update
+  crawler/crawler.py        # crawler
+  processing/process.py     # cleaning + chunking
+  indexing/build_index.py   # build Chroma index
+  inference/retriever.py    # retrieve context
+  inference/generate.py     # load model and generate
+  training/prepare_dataset.py
+  training/finetune_mlx.py
+  utils/config.py
+  main.py                   # unified CLI entrypoint
+requirements.txt
+```
 
-## Known issues / risks
+## Development
 
-- Long first-time model download (multi-GB). Ensure enough disk space and stable network.
-- If mlx_lm API changes, adapter loading falls back to merged/base; guarded in `src/inference/generate.py`.
+Run linters locally:
+```bash
+ruff check .
+# Optional: format shell scripts and run shellcheck (if installed)
+shfmt -l -i 2 -ci -s $(git ls-files -- '*.sh' '*.bash')
+shellcheck -x $(git ls-files -- '*.sh' '*.bash')
+```
+
+## Troubleshooting
+
+- First run downloads multi-GB model shards. Ensure stable network and disk space. Progress may appear stalled during large downloads.
+- If embeddings are slow, remember MiniLM runs on CPU by default; overall speed depends on CPU throughput.
+- If mlx_lm APIs change, inference falls back to merged/base weights per guards in `src/inference/generate.py`.
+- If Streamlit fails to start, check that your venv is active and port 8501 is free; try `python -m src.main app`.
+
+## Key Concepts, Links, and Acknowledgments
+
+- MLX: https://ml-explore.github.io/mlx/ • https://github.com/ml-explore/mlx
+- mlx-lm: https://github.com/ml-explore/mlx-examples/tree/main/llms • https://pypi.org/project/mlx-lm/
+- LoRA (paper): https://arxiv.org/abs/2106.09685
+- RAG (paper): https://arxiv.org/abs/2005.11401
+- Chroma: https://docs.trychroma.com/
+- Sentence-Transformers: https://www.sbert.net/ • https://github.com/UKPLab/sentence-transformers
+- Qwen2.5-7B-Instruct (base): https://huggingface.co/Qwen/Qwen2.5-7B-Instruct
+- Qwen2.5-7B-Instruct-4bit (MLX): https://huggingface.co/mlx-community/Qwen2.5-7B-Instruct-4bit
+- Streamlit: https://streamlit.io/ • https://docs.streamlit.io/
