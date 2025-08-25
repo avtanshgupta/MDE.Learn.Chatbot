@@ -28,7 +28,7 @@ PYTHON_BIN="${PYTHON:-python}"
 DEBUG=0
 
 print_help() {
-  cat <<EOF
+  cat << EOF
 Usage: $(basename "$0") [options]
 
 Runs:
@@ -51,11 +51,11 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -h|--help)
+    -h | --help)
       print_help
       exit 0
       ;;
-    -d|--debug)
+    -d | --debug)
       DEBUG=1
       shift
       ;;

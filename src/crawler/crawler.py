@@ -1,18 +1,19 @@
-import re
-import time
-import httpx
-import urllib.parse as urlparse
-from urllib.parse import urljoin, urlunparse
-from urllib import robotparser
-from bs4 import BeautifulSoup
-from typing import Set, List, Dict, Tuple
 import logging
+import time
+import urllib.parse as urlparse
+from typing import Dict, List, Set, Tuple
+from urllib import robotparser
+from urllib.parse import urljoin, urlunparse
 
-from src.utils.config import load_config, ensure_dir, url_to_filename, save_json
+import httpx
+from bs4 import BeautifulSoup
+
+from src.utils.config import ensure_dir, load_config, save_json, url_to_filename
 from src.utils.logging_setup import setup_logging
 
 setup_logging()
 logger = logging.getLogger(__name__)
+
 
 def normalize_url(url: str) -> str:
     """Normalize URL by removing fragments and normalizing scheme/host."""
@@ -23,6 +24,7 @@ def normalize_url(url: str) -> str:
     out = urlunparse((scheme, netloc, normalized.path, normalized.params, normalized.query, ""))
     # logger.debug("normalize_url: %s -> %s", url, out)
     return out
+
 
 def is_allowed(url: str, cfg: dict, rp: robotparser.RobotFileParser) -> bool:
     """Check domain/path filters, language, patterns, and robots.txt."""
@@ -63,6 +65,7 @@ def is_allowed(url: str, cfg: dict, rp: robotparser.RobotFileParser) -> bool:
 
     return True
 
+
 def extract_links(html: str, base_url: str) -> List[str]:
     """Extract and normalize anchor links from an HTML page."""
     soup = BeautifulSoup(html, "lxml")
@@ -76,6 +79,7 @@ def extract_links(html: str, base_url: str) -> List[str]:
     logger.debug("extract_links: found=%d base=%s", len(hrefs), base_url)
     return hrefs
 
+
 def fetch(client: httpx.Client, url: str, timeout: int) -> Tuple[int, str]:
     """Fetch a URL and return (status_code, text)."""
     try:
@@ -85,6 +89,7 @@ def fetch(client: httpx.Client, url: str, timeout: int) -> Tuple[int, str]:
     except Exception as e:
         logger.warning("fetch error: %s -> %s", url, e)
         return 0, ""
+
 
 def crawl() -> None:
     cfg = load_config()
@@ -162,6 +167,7 @@ def crawl() -> None:
     # Save manifest
     save_json(manifest, url_manifest_path)
     logger.info("DONE. pages_saved=%d manifest=%s", len(manifest), url_manifest_path)
+
 
 if __name__ == "__main__":
     crawl()

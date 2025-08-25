@@ -1,17 +1,18 @@
+import json
+import logging
 import os
 import re
-import json
-from typing import List, Dict, Any, Tuple
-import logging
+from typing import Any, Dict, List, Tuple
 
 from bs4 import BeautifulSoup
 from readability import Document
 
-from src.utils.config import load_config, ensure_dir, read_json
+from src.utils.config import ensure_dir, load_config, read_json
 
 logger = logging.getLogger(__name__)
 
 BLOCK_TAGS = {"script", "style", "nav", "footer", "header", "noscript", "aside", "form"}
+
 
 def html_to_text(html: str) -> Tuple[str, str]:
     """Extract main content text and title from HTML using readability with bs4 cleanup."""
@@ -46,11 +47,13 @@ def html_to_text(html: str) -> Tuple[str, str]:
     logger.debug("html_to_text: paragraphs=%d chars=%d", len(text_parts), len(text))
     return title, text
 
+
 def normalize_whitespace(s: str) -> str:
     s = re.sub(r"\r\n?", "\n", s)
     s = re.sub(r"[ \t]+", " ", s)
     s = re.sub(r"\n{3,}", "\n\n", s)
     return s.strip()
+
 
 def chunk_text(text: str, max_len: int, overlap: int) -> List[str]:
     """Greedy paragraph-based chunking with character limits and overlap."""
@@ -70,7 +73,7 @@ def chunk_text(text: str, max_len: int, overlap: int) -> List[str]:
             # start new chunk with overlap from end of previous
             if overlap > 0 and chunks[-1]:
                 prev = chunks[-1]
-                tail = prev[max(0, len(prev) - overlap):]
+                tail = prev[max(0, len(prev) - overlap) :]
                 # try to align to paragraph boundary
                 tail_paras = tail.split("\n\n")
                 tail_keep = tail_paras[-3:] if len(tail_paras) > 3 else tail_paras
@@ -92,15 +95,15 @@ def chunk_text(text: str, max_len: int, overlap: int) -> List[str]:
             # hard split if a single paragraph overflowed
             step = max_len - overlap if overlap < max_len else max_len
             for i in range(0, len(c), step):
-                trimmed.append(c[i:i + max_len])
+                trimmed.append(c[i : i + max_len])
 
     logger.debug("chunk_text: chunks=%d", len(trimmed))
     return trimmed
 
+
 def process() -> None:
     cfg = load_config()
     manifest_path = cfg["data"]["url_manifest"]
-    raw_dir = cfg["data"]["raw_html_dir"]
     chunks_path = cfg["data"]["chunks_path"]
 
     min_section = int(cfg["processing"]["min_section_chars"])
@@ -148,6 +151,7 @@ def process() -> None:
 
     out_f.close()
     logger.info("DONE pages=%d chunks_total=%d -> %s", count_pages, count_chunks, chunks_path)
+
 
 if __name__ == "__main__":
     process()

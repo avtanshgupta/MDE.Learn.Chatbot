@@ -27,7 +27,7 @@ DRY_RUN=0
 DEBUG=0
 
 print_help() {
-  cat <<'EOF'
+  cat << 'EOF'
 Clean / Reset generated artifacts.
 
 Options:
@@ -49,10 +49,22 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -y|--yes) YES=1; shift ;;
-    -n|--dry-run) DRY_RUN=1; shift ;;
-    -d|--debug) DEBUG=1; shift ;;
-    -h|--help) print_help; exit 0 ;;
+    -y | --yes)
+      YES=1
+      shift
+      ;;
+    -n | --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    -d | --debug)
+      DEBUG=1
+      shift
+      ;;
+    -h | --help)
+      print_help
+      exit 0
+      ;;
     *)
       echo "Unknown argument: $1"
       echo "Try --help for usage."

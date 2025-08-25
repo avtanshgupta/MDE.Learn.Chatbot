@@ -1,17 +1,18 @@
-import os
 import json
 import logging
-from typing import List, Dict, Any
+import os
+from typing import Any, Dict, List
 
 import chromadb
+import numpy as np
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
-import numpy as np
 from tqdm import tqdm
 
-from src.utils.config import load_config, ensure_dir
+from src.utils.config import ensure_dir, load_config
 
 logger = logging.getLogger(__name__)
+
 
 def load_chunks(chunks_path: str) -> List[Dict[str, Any]]:
     logger.info("load_chunks <- %s", chunks_path)
@@ -33,6 +34,7 @@ def load_chunks(chunks_path: str) -> List[Dict[str, Any]]:
                 continue
     logger.info("load_chunks -> %d records", len(chunks))
     return chunks
+
 
 def build_index() -> None:
     cfg = load_config()
@@ -71,25 +73,28 @@ def build_index() -> None:
         uid = f'{rec["url"]}#chunk-{rec["chunk_id"]}'
         ids.append(uid)
         texts.append(rec["text"])
-        metas.append({
-            "url": rec.get("url", ""),
-            "title": rec.get("title", ""),
-            "source_path": rec.get("source_path", ""),
-            "chunk_id": rec.get("chunk_id", 0),
-        })
+        metas.append(
+            {
+                "url": rec.get("url", ""),
+                "title": rec.get("title", ""),
+                "source_path": rec.get("source_path", ""),
+                "chunk_id": rec.get("chunk_id", 0),
+            }
+        )
 
     total = len(texts)
     logger.info("Embedding & upserting total=%d batch=%d", total, batch)
     for i in tqdm(range(0, total, batch), desc="[indexing] Embedding"):
-        batch_texts = texts[i:i+batch]
-        batch_ids = ids[i:i+batch]
-        batch_metas = metas[i:i+batch]
+        batch_texts = texts[i : i + batch]
+        batch_ids = ids[i : i + batch]
+        batch_metas = metas[i : i + batch]
         embs = embedder.encode(batch_texts, show_progress_bar=False, normalize_embeddings=True)
         embs_list = [e.astype(np.float32).tolist() for e in embs]
         collection.upsert(ids=batch_ids, embeddings=embs_list, metadatas=batch_metas, documents=batch_texts)
         logger.debug("upserted: %d..%d", i, i + len(batch_texts) - 1)
 
     logger.info("Indexing complete.")
+
 
 if __name__ == "__main__":
     build_index()

@@ -1,18 +1,25 @@
 import os
 import sys
-from typing import List, Dict, Any
+import time
+from typing import Any, Dict, List
 
 import streamlit as st
-import time
 
 # Ensure project root on sys.path when running "streamlit run src/app/app.py"
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from src.utils.config import load_config
+from src.app.updater import (
+    can_run_update,
+    get_last_run_info,
+    is_update_running,
+    seconds_until_next,
+    start_background_services,
+    trigger_update,
+)
 from src.inference.generate import ModelRunner
-from src.app.updater import start_background_services, trigger_update, can_run_update, seconds_until_next, get_last_run_info, is_update_running
+from src.utils.config import load_config
 
 st.set_page_config(page_title="MDE Learn Chatbot", page_icon="🛡️", layout="wide", initial_sidebar_state="collapsed")
 
@@ -33,6 +40,7 @@ print(f"[app.app] Supported modes={modes}; base model={cfg['model']['base_id']}"
 if "services_started" not in st.session_state:
     print("[app.app] Starting background update services")
     try:
+
         def _on_update_complete():
             try:
                 print("[app.app] Update complete callback: invalidating runners cache and switching mode to rag_ft")
@@ -40,6 +48,7 @@ if "services_started" not in st.session_state:
                 st.session_state["mode"] = "rag_ft"
             except Exception as e:
                 print(f"[app.app] Update complete callback error: {e}")
+
         start_background_services(cfg, on_complete=_on_update_complete)
         st.session_state["services_started"] = True
     except Exception as e:
@@ -147,6 +156,7 @@ if "runners" not in st.session_state:
 else:
     print(f"[app.app] Runners cache present with modes: {list(st.session_state['runners'].keys())}")
 
+
 def get_runner(m: str) -> ModelRunner:
     print(f"[app.app] get_runner called for mode={m}")
     runner = st.session_state["runners"].get(m)
@@ -162,6 +172,7 @@ def get_runner(m: str) -> ModelRunner:
     runner.temperature = temperature
     print(f"[app.app] Updated runner knobs: top_k={runner.retrieval_top_k}, max_tokens={runner.max_tokens}, temperature={runner.temperature}")
     return runner
+
 
 # Pre-warm the selected mode to load pre-trained weights on app load
 try:

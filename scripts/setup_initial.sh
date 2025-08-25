@@ -15,12 +15,11 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-WITH_DATASET=1
 PYTHON_BIN="${PYTHON:-python}"
 DEBUG=0
 
 print_help() {
-  cat <<EOF
+  cat << EOF
 Usage: $(basename "$0") [options]
 
 Runs the initial pipeline steps as documented in README:
@@ -44,11 +43,11 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -h|--help)
+    -h | --help)
       print_help
       exit 0
       ;;
-    -d|--debug)
+    -d | --debug)
       DEBUG=1
       shift
       ;;

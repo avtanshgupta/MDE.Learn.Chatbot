@@ -1,15 +1,17 @@
-import os
 import logging
-from typing import Dict, List, Iterator, Optional, Tuple
+import os
+from typing import Dict, Iterator, List, Optional, Tuple
 
-from src.utils.config import load_config
-from src.inference.retriever import Retriever, format_context
+from mlx_lm import generate as mlx_generate
 
 # MLX LM
 from mlx_lm import load as mlx_load
-from mlx_lm import generate as mlx_generate
+
+from src.inference.retriever import Retriever, format_context
+from src.utils.config import load_config
 
 logger = logging.getLogger(__name__)
+
 
 def build_messages(system_prompt: str, user_prompt: str) -> List[Dict[str, str]]:
     """
@@ -27,6 +29,7 @@ def build_messages(system_prompt: str, user_prompt: str) -> List[Dict[str, str]]
     messages.append({"role": "user", "content": user_prompt})
     logger.debug("Messages built count=%d", len(messages))
     return messages
+
 
 class ModelRunner:
     def __init__(self, mode: Optional[str] = None) -> None:
@@ -131,10 +134,7 @@ class ModelRunner:
         logger.debug("Retrieved %d doc(s); context length=%d; sources=%d", len(docs), len(context), len(sources))
 
         instruction = (
-            "Use the following retrieved MDE documentation excerpts to answer the question.\n"
-            "Cite sources by index when helpful.\n\n"
-            f"Context:\n{context}\n\n"
-            f"Question: {question}\n"
+            f"Use the following retrieved MDE documentation excerpts to answer the question.\nCite sources by index when helpful.\n\nContext:\n{context}\n\nQuestion: {question}\n"
         )
         return instruction, sources
 
@@ -165,11 +165,7 @@ class ModelRunner:
         logger.debug("Messages prepared count=%d", len(messages))
 
         # Prefer using chat template for Qwen2.5
-        prompt = self.tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True
-        )
+        prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         logger.debug("Chat template applied. Prompt length=%d", len(prompt))
 
         gen_kwargs = {
@@ -181,6 +177,7 @@ class ModelRunner:
 
         if stream and self.use_streaming:
             logger.info("Starting streaming generation...")
+
             def streamer():
                 try:
                     for token in mlx_generate(self.model, self.tokenizer, prompt=prompt, stream=True, **gen_kwargs):
@@ -189,11 +186,14 @@ class ModelRunner:
                     logger.debug("'stream' kw not supported by mlx_lm.generate; falling back to non-streaming")
                     text = mlx_generate(self.model, self.tokenizer, prompt=prompt, **gen_kwargs)
                     yield text
+
             return streamer(), sources
         else:
             logger.info("Starting non-streaming generation...")
             text = mlx_generate(self.model, self.tokenizer, prompt=prompt, **gen_kwargs)
             logger.debug("Non-streaming generation complete. Text length=%d", len(text))
+
             def single():
                 yield text
+
             return single(), sources

@@ -1,12 +1,13 @@
 import json
+import logging
 import os
 import random
-import logging
-from typing import List, Dict, Any, Tuple
+from typing import Any, Dict, List, Tuple
 
-from src.utils.config import load_config, ensure_dir, read_json
+from src.utils.config import ensure_dir, load_config
 
 logger = logging.getLogger(__name__)
+
 
 def load_chunks(path: str) -> List[Dict[str, Any]]:
     logger.info("load_chunks <- %s", path)
@@ -29,6 +30,7 @@ def load_chunks(path: str) -> List[Dict[str, Any]]:
     logger.info("load_chunks -> %d records", len(records))
     return records
 
+
 def build_clm_text(rec: Dict[str, Any]) -> str:
     title = rec.get("title", "").strip()
     url = rec.get("url", "").strip()
@@ -40,6 +42,7 @@ def build_clm_text(rec: Dict[str, Any]) -> str:
         header.append(f"URL: {url}")
     prefix = ("\n".join(header) + "\n\n") if header else ""
     return f"{prefix}{text}\n\n"
+
 
 def split_dataset(records: List[Dict[str, Any]], val_ratio: float, seed: int) -> Tuple[List[str], List[str]]:
     logger.info("split_dataset: total=%d val_ratio=%.3f seed=%d", len(records), val_ratio, seed)
@@ -53,12 +56,14 @@ def split_dataset(records: List[Dict[str, Any]], val_ratio: float, seed: int) ->
     logger.info("split -> train=%d val=%d", len(train_texts), len(val_texts))
     return train_texts, val_texts
 
+
 def cap_samples(samples: List[str], cap: int | None) -> List[str]:
     if cap is None:
         return samples
     capped = samples[: max(0, cap)]
     logger.info("cap_samples: cap=%s -> %d", cap, len(capped))
     return capped
+
 
 def write_jsonl_texts(texts: List[str], path: str) -> None:
     ensure_dir(os.path.dirname(path))
@@ -71,6 +76,7 @@ def write_jsonl_texts(texts: List[str], path: str) -> None:
     except Exception:
         size = None
     logger.info("wrote %d lines (bytes=%s) to %s", len(texts), size, path)
+
 
 def main() -> None:
     cfg = load_config()
@@ -97,6 +103,7 @@ def main() -> None:
     write_jsonl_texts(val_texts, out_val)
 
     logger.info("DONE")
+
 
 if __name__ == "__main__":
     main()

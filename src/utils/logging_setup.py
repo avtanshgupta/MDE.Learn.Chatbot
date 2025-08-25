@@ -4,6 +4,7 @@ from typing import Optional
 
 _INITIALIZED = False
 
+
 def setup_logging(level: Optional[str] = None) -> None:
     global _INITIALIZED
     if _INITIALIZED:

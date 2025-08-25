@@ -1,8 +1,9 @@
-import os
-import sys
-import subprocess
 import argparse
 import logging
+import os
+import subprocess
+import sys
+
 from src.utils.logging_setup import setup_logging
 
 # Ensure project root on sys.path
@@ -13,6 +14,7 @@ if PROJECT_ROOT not in sys.path:
 setup_logging()
 logger = logging.getLogger(__name__)
 
+
 def run_cmd(cmd: list[str]) -> int:
     logger.info("Running command: %s", " ".join(cmd))
     proc = subprocess.Popen(cmd)
@@ -21,41 +23,54 @@ def run_cmd(cmd: list[str]) -> int:
     logger.info("Command exited with code=%s", code)
     return code
 
+
 def cmd_crawl(args: argparse.Namespace) -> None:
     logger.info("Starting crawl step")
     import src.crawler.crawler as crawler
+
     crawler.crawl()
     logger.info("Crawl step complete")
+
 
 def cmd_process(args: argparse.Namespace) -> None:
     logger.info("Starting process step")
     import src.processing.process as process
+
     process.process()
     logger.info("Process step complete")
+
 
 def cmd_index(args: argparse.Namespace) -> None:
     logger.info("Starting index step")
     import src.indexing.build_index as build_index
+
     build_index.build_index()
     logger.info("Index step complete")
+
 
 def cmd_prepare_dataset(args: argparse.Namespace) -> None:
     logger.info("Starting dataset preparation step")
     import src.training.prepare_dataset as prep
+
     prep.main()
     logger.info("Dataset preparation step complete")
+
 
 def cmd_finetune(args: argparse.Namespace) -> None:
     logger.info("Starting finetune step")
     import src.training.finetune_mlx as ft
+
     ft.finetune()
     logger.info("Finetune step complete")
+
 
 def cmd_merge(args: argparse.Namespace) -> None:
     logger.info("Starting merge step")
     import src.training.finetune_mlx as ft
+
     ft.merge()
     logger.info("Merge step complete")
+
 
 def cmd_app(args: argparse.Namespace) -> None:
     # Launch Streamlit app
@@ -66,6 +81,7 @@ def cmd_app(args: argparse.Namespace) -> None:
         sys.exit(code)
     else:
         logger.info("Streamlit exited cleanly")
+
 
 def main() -> None:
     logger.info("Parsing CLI arguments")
@@ -95,6 +111,7 @@ def main() -> None:
     except Exception:
         logger.exception("Subcommand raised an exception")
         raise
+
 
 if __name__ == "__main__":
     main()

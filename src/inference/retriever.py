@@ -1,15 +1,15 @@
-import os
 import logging
-from typing import List, Dict, Any, Tuple
+from typing import Any, Dict, List, Tuple
 
 import chromadb
+import numpy as np
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
-import numpy as np
 
 from src.utils.config import load_config
 
 logger = logging.getLogger(__name__)
+
 
 class Retriever:
     def __init__(self) -> None:
@@ -18,10 +18,7 @@ class Retriever:
         self.persist_dir = cfg["index"]["chroma_persist_dir"]
         self.collection_name = cfg["index"]["collection"]
         self.embed_model_id = cfg["index"]["embedding_model"]
-        logger.info(
-            "Config: persist_dir=%s, collection=%s, embed_model=%s",
-            self.persist_dir, self.collection_name, self.embed_model_id
-        )
+        logger.info("Config: persist_dir=%s, collection=%s, embed_model=%s", self.persist_dir, self.collection_name, self.embed_model_id)
 
         logger.info("Connecting to Chroma PersistentClient...")
         self.client = chromadb.PersistentClient(path=self.persist_dir, settings=Settings(allow_reset=False))
@@ -29,14 +26,8 @@ class Retriever:
             self.collection = self.client.get_collection(self.collection_name)
             logger.info("Loaded collection '%s'", self.collection_name)
         except Exception as e:
-            logger.exception(
-                "Failed to load collection '%s' at %s: %s",
-                self.collection_name, self.persist_dir, e
-            )
-            raise RuntimeError(
-                f"Chroma collection '{self.collection_name}' not found at {self.persist_dir}. "
-                "Build the index first."
-            ) from e
+            logger.exception("Failed to load collection '%s' at %s: %s", self.collection_name, self.persist_dir, e)
+            raise RuntimeError(f"Chroma collection '{self.collection_name}' not found at {self.persist_dir}. Build the index first.") from e
 
         logger.info("Loading embedding model: %s", self.embed_model_id)
         self.embedder = SentenceTransformer(self.embed_model_id)
@@ -71,13 +62,16 @@ class Retriever:
         logger.info("Retrieved %d hit(s)", n_hits)
         # Chroma returns lists of lists (per query)
         for i in range(n_hits):
-            docs.append({
-                "text": res["documents"][0][i],
-                "metadata": res["metadatas"][0][i],
-                "distance": res["distances"][0][i],
-            })
+            docs.append(
+                {
+                    "text": res["documents"][0][i],
+                    "metadata": res["metadatas"][0][i],
+                    "distance": res["distances"][0][i],
+                }
+            )
         logger.debug("Assembled %d document dict(s)", len(docs))
         return docs
+
 
 def format_context(docs: List[Dict[str, Any]]) -> Tuple[str, List[Dict[str, Any]]]:
     """Return formatted context string and simplified sources list."""
@@ -89,7 +83,7 @@ def format_context(docs: List[Dict[str, Any]]) -> Tuple[str, List[Dict[str, Any]
         title = meta.get("title", "") or "Untitled"
         url = meta.get("url", "") or ""
         chunk_id = meta.get("chunk_id", 0)
-        lines.append(f"[{idx}] Title: {title}\nURL: {url}\nChunk: {chunk_id}\nContent:\n{d.get('text','')}\n")
+        lines.append(f"[{idx}] Title: {title}\nURL: {url}\nChunk: {chunk_id}\nContent:\n{d.get('text', '')}\n")
         sources.append({"rank": idx, "title": title, "url": url, "chunk_id": chunk_id, "distance": d.get("distance", None)})
     context = "\n\n".join(lines)
     logger.debug("Built context length=%d chars; sources=%d", len(context), len(sources))

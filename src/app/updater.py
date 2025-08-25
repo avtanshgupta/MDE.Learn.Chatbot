@@ -1,17 +1,19 @@
-import os
 import json
-import time
-import threading
 import logging
+import os
+import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Callable, Tuple, Optional
+from typing import Callable, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 # Utilities for last-run tracking
 
+
 def _ensure_parent(path: str) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
+
 
 def _read_last_run(path: str) -> Optional[float]:
     try:
@@ -21,6 +23,7 @@ def _read_last_run(path: str) -> Optional[float]:
     except Exception:
         return None
 
+
 def _write_last_run(path: str, ts: float) -> None:
     try:
         _ensure_parent(path)
@@ -29,13 +32,17 @@ def _write_last_run(path: str, ts: float) -> None:
     except Exception as e:
         logger.error("Failed to write last_run file: %s", e)
 
+
 def _now() -> float:
     return time.time()
 
+
 # Public helpers
+
 
 def get_last_run_info(cfg) -> Optional[float]:
     return _read_last_run(cfg["update"]["last_run_file"])
+
 
 def seconds_until_next(cfg) -> float:
     last = get_last_run_info(cfg)
@@ -45,19 +52,23 @@ def seconds_until_next(cfg) -> float:
     delta = (last + interval_h * 3600.0) - _now()
     return max(0.0, delta)
 
+
 # Update execution
 
 _RUNNING_LOCK = threading.Lock()
 _RUNNING_FLAG = False
+
 
 def _set_running(flag: bool) -> None:
     global _RUNNING_FLAG
     with _RUNNING_LOCK:
         _RUNNING_FLAG = flag
 
+
 def _is_running() -> bool:
     with _RUNNING_LOCK:
         return _RUNNING_FLAG
+
 
 def can_run_update(cfg) -> Tuple[bool, float]:
     """
@@ -68,18 +79,20 @@ def can_run_update(cfg) -> Tuple[bool, float]:
     rem = seconds_until_next(cfg)
     return rem <= 0.0, rem
 
+
 def is_update_running() -> bool:
     """Return True if an update pipeline is currently running."""
     return _is_running()
+
 
 def _run_update_pipeline(cfg) -> None:
     logger.info("Update pipeline start")
     # Lazy imports to avoid heavy startup
     from src.crawler.crawler import crawl
-    from src.processing.process import process as process_docs
     from src.indexing.build_index import build_index
-    from src.training.prepare_dataset import main as prepare_dataset
+    from src.processing.process import process as process_docs
     from src.training.finetune_mlx import finetune
+    from src.training.prepare_dataset import main as prepare_dataset
 
     try:
         logger.info("Step: crawl")
@@ -113,6 +126,7 @@ def _run_update_pipeline(cfg) -> None:
 
     logger.info("Update pipeline end")
 
+
 def _run_thread(cfg, on_complete: Optional[Callable[[], None]]) -> None:
     _set_running(True)
     try:
@@ -125,6 +139,7 @@ def _run_thread(cfg, on_complete: Optional[Callable[[], None]]) -> None:
                 logger.exception("on_complete failed: %s", e)
     finally:
         _set_running(False)
+
 
 def trigger_update(cfg, on_complete: Optional[Callable[[], None]] = None, force: bool = False) -> Tuple[bool, str]:
     # Always prevent concurrent runs
@@ -139,10 +154,13 @@ def trigger_update(cfg, on_complete: Optional[Callable[[], None]] = None, force:
     t.start()
     return True, "Update accepted and running in background."
 
+
 def trigger_update_force(cfg, on_complete: Optional[Callable[[], None]] = None) -> Tuple[bool, str]:
     return trigger_update(cfg, on_complete=on_complete, force=True)
 
+
 # HTTP server for external trigger
+
 
 class _UpdateHandler(BaseHTTPRequestHandler):
     cfg = None
@@ -166,9 +184,11 @@ class _UpdateHandler(BaseHTTPRequestHandler):
         # Reduce default noisy logging
         logger.info("HTTP: " + format, *args)
 
+
 def start_http_server(cfg, on_complete: Optional[Callable[[], None]] = None) -> None:
     host = cfg["update"]["api_host"]
     port = int(cfg["update"]["api_port"])
+
     def _srv():
         try:
             server = HTTPServer((host, port), _UpdateHandler)
@@ -178,8 +198,10 @@ def start_http_server(cfg, on_complete: Optional[Callable[[], None]] = None) -> 
             server.serve_forever()
         except Exception as e:
             logger.exception("HTTP server failed: %s", e)
+
     th = threading.Thread(target=_srv, daemon=True)
     th.start()
+
 
 def start_scheduler(cfg, on_complete: Optional[Callable[[], None]] = None) -> None:
     def _loop():
@@ -207,8 +229,10 @@ def start_scheduler(cfg, on_complete: Optional[Callable[[], None]] = None) -> No
             else:
                 sleep_sec = int(min(3600, max(60, rem)))
             time.sleep(sleep_sec)
+
     th = threading.Thread(target=_loop, daemon=True)
     th.start()
+
 
 def start_background_services(cfg, on_complete: Optional[Callable[[], None]] = None) -> None:
     if not cfg.get("update", {}).get("enabled", False):

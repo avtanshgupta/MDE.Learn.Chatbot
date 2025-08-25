@@ -1,12 +1,13 @@
+import logging
 import os
 import subprocess
 import sys
-import logging
 from typing import List
 
-from src.utils.config import load_config, ensure_dir
+from src.utils.config import ensure_dir, load_config
 
 logger = logging.getLogger(__name__)
+
 
 def run(cmd: List[str]) -> int:
     logger.info("Running command: %s", " ".join(cmd))
@@ -15,6 +16,7 @@ def run(cmd: List[str]) -> int:
     code = proc.returncode
     logger.info("Command finished with code=%s", code)
     return code
+
 
 def finetune() -> None:
     cfg = load_config()
@@ -58,20 +60,30 @@ def finetune() -> None:
             logger.debug("Symlinked %s -> %s", dst, src)
         except Exception as e:
             import shutil
+
             shutil.copyfile(src, dst)
             logger.debug("Copied %s -> %s (symlink failed: %s)", src, dst, e)
 
     # Uses mlx_lm lora subcommand (LoRA fine-tuning)
     # Note: Recent mlx-lm versions use 'lora' with --data directory (containing train.jsonl/valid.jsonl)
     cmd = [
-        sys.executable, "-m", "mlx_lm", "lora",
-        "--model", base_id,
+        sys.executable,
+        "-m",
+        "mlx_lm",
+        "lora",
+        "--model",
+        base_id,
         "--train",
-        "--data", lora_data_dir,
-        "--adapter-path", out_dir,
-        "--batch-size", batch_size,
-        "--learning-rate", lr,
-        "--save-every", "1000",
+        "--data",
+        lora_data_dir,
+        "--adapter-path",
+        out_dir,
+        "--batch-size",
+        batch_size,
+        "--learning-rate",
+        lr,
+        "--save-every",
+        "1000",
     ]
 
     code = run(cmd)
@@ -79,6 +91,7 @@ def finetune() -> None:
         logger.error("Finetune failed with code=%s", code)
         sys.exit(code)
     logger.info("Finetune DONE. LoRA adapter saved to: %s", out_dir)
+
 
 def merge() -> None:
     cfg = load_config()
@@ -94,20 +107,17 @@ def merge() -> None:
     logger.info("  out_dir=%s", out_dir)
 
     # Merge LoRA into a new model folder for standalone inference (optional; for FT-only mode)
-    cmd = [
-        sys.executable, "-m", "mlx_lm", "fuse",
-        "--model", base_id,
-        "--adapter-path", adapter_dir,
-        "--save-path", out_dir
-    ]
+    cmd = [sys.executable, "-m", "mlx_lm", "fuse", "--model", base_id, "--adapter-path", adapter_dir, "--save-path", out_dir]
     code = run(cmd)
     if code != 0:
         logger.error("Merge failed with code=%s", code)
         sys.exit(code)
     logger.info("Merge DONE. Merged model saved to: %s", out_dir)
 
+
 if __name__ == "__main__":
     import argparse
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--merge-only", action="store_true", help="Only run LoRA merge step.")
     args = ap.parse_args()
