@@ -170,6 +170,38 @@ Notes:
 - First finetune/inference will download the base model locally (Hugging Face).
 - Adapters saved to `models/adapters/...`; merged weights to `models/merges/...`.
 
+## Pipeline: Crawl → Process → Index → Dataset → Finetune
+
+1) Crawl (fetch raw HTML and URL manifest based on `configs.crawl`; saves to `data/raw/html` and `data/processed/urls.json`)
+```bash
+python -m src.crawler.crawler
+```
+
+2) Process (parse HTML, clean text, and chunk; writes `data/processed` and `data/processed/chunks.jsonl`)
+```bash
+python -m src.processing.process
+```
+
+3) Index (embed chunks and build a persistent Chroma index at `data/index/chroma`)
+```bash
+python -m src.indexing.build_index
+```
+
+4) Dataset (create JSONL text data for continual pretraining; outputs `data/datasets/finetune.{train,val}.jsonl`)
+```bash
+python -m src.training.prepare_dataset
+```
+
+5) Finetune (run MLX LoRA finetuning of Qwen2.5-7B-Instruct-4bit; saves adapters under `models/adapters/...`)
+```bash
+python -m src.training.finetune_mlx
+```
+
+Optional: merge LoRA into standalone weights
+```bash
+python -m src.training.finetune_mlx --merge-only
+```
+
 ### Adapter Loading Order (Inference)
 
 1) Load LoRA adapter from `finetune.out_dir` if present  
