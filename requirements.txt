@@ -1,10 +1,6 @@
 # Core
 pyyaml
-python-dotenv
 tqdm
-tenacity
-pydantic>=2
-requests
 httpx[http2]
 beautifulsoup4
 lxml
@@ -17,10 +13,9 @@ transformers>=4.44.0
 torch
 numpy
 
-# MLX + Qwen loading / finetuning
+# MLX + fine-tuning
 mlx
 mlx-lm
-huggingface_hub
 
 # App
 streamlit
