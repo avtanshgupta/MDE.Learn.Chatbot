@@ -181,12 +181,17 @@ class ModelRunner:
         if stream and self.use_streaming:
             print("[inference.generate] Starting streaming generation...")
             def streamer():
-                for token in mlx_generate(self.model, self.tokenizer, prompt=prompt, stream=True, **gen_kwargs):
-                    yield token
+                try:
+                    for token in mlx_generate(self.model, self.tokenizer, prompt=prompt, stream=True, **gen_kwargs):
+                        yield token
+                except TypeError:
+                    print("[inference.generate] 'stream' kw not supported by mlx_lm.generate; falling back to non-streaming")
+                    text = mlx_generate(self.model, self.tokenizer, prompt=prompt, **gen_kwargs)
+                    yield text
             return streamer(), sources
         else:
             print("[inference.generate] Starting non-streaming generation...")
-            text = mlx_generate(self.model, self.tokenizer, prompt=prompt, stream=False, **gen_kwargs)
+            text = mlx_generate(self.model, self.tokenizer, prompt=prompt, **gen_kwargs)
             print(f"[inference.generate] Non-streaming generation complete. Text length={len(text)}")
             def single():
                 yield text

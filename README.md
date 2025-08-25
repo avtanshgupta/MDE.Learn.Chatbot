@@ -1,8 +1,7 @@
 # MDE.Learn.Chatbot
 
 End-to-end local project that:
-
-- Crawls and extracts all documentation under <https://learn.microsoft.com/en-us/defender-endpoint/>
+- Crawls and extracts all documentation under https://learn.microsoft.com/en-us/defender-endpoint/
 - Processes and chunks content, builds a vector index (Chroma + Sentence-Transformers)
 - Fine-tunes Qwen2.5-7B-Instruct-4bit locally on Apple Silicon using MLX + LoRA
 - Serves a Streamlit chatbot with RAG for freshness (retrieval) and FT for domain tone
@@ -41,24 +40,27 @@ requirements.txt
 
 ## Setup
 
-1. Prerequisites
-
+1) Prerequisites
 - Python 3.10+
 - macOS on Apple Silicon (M-series; MLX uses Apple GPUs/NPUs)
 - Sufficient disk space (model + index + datasets)
 - Xcode Command Line Tools may help with wheels
 
-2. Create environment and install dependencies
+2) Create environment and install dependencies
 
+Create and activate venv:
 ```bash
-# create and activate venv
 python -m venv .venv
 source .venv/bin/activate
+```
 
-# upgrade basics
+Upgrade basics:
+```bash
 pip install -U pip setuptools wheel
+```
 
-# install project deps
+Install project deps:
+```bash
 pip install -r requirements.txt
 ```
 
@@ -92,57 +94,48 @@ System prompt is in `configs/prompts/system.txt`.
 
 Run these from the repo root with your venv activated.
 
-1. Crawl docs (respects robots.txt, filters to defender-endpoint path)
-
+1) Crawl docs (respects robots.txt, filters to defender-endpoint path)
 ```bash
 python -m src.crawler.crawler
 ```
 
-2. Process HTML to clean text and chunks
-
+2) Process HTML to clean text and chunks
 ```bash
 python -m src.processing.process
 ```
 
-3. Build vector index (Chroma + Sentence-Transformers)
-
+3) Build vector index (Chroma + Sentence-Transformers)
 ```bash
 python -m src.indexing.build_index
 ```
 
-4. Prepare fine-tune datasets (JSONL {"text": ...})
-
+4) Prepare fine-tune datasets (JSONL {"text": ...})
 ```bash
 python -m src.training.prepare_dataset
 ```
 
-5. Fine-tune Qwen2.5-7B-Instruct-4bit locally with MLX LoRA
-
+5) Fine-tune Qwen2.5-7B-Instruct-4bit locally with MLX LoRA
 ```bash
 python -m src.training.finetune_mlx
 ```
 
-6. (Optional) Merge LoRA into standalone weights
-
+6) (Optional) Merge LoRA into standalone weights
 ```bash
 python -m src.training.finetune_mlx --merge-only
 ```
 
 Notes:
-
 - The first finetune/inference call will download the base model locally (Hugging Face).
 - LoRA adapters are saved to `models/adapters/...`. Merge outputs to `models/merges/...`.
 
 ## Streamlit Chatbot
 
 Start the app:
-
 ```bash
-streamlit run src/app/app.py
+python -m streamlit run src/app/app.py
 ```
 
 Sidebar “Mode”:
-
 - rag: Only retrieval-augmented generation over the Chroma index
 - ft: Only the fine-tuned model (no retrieval)
 - rag_ft: Use RAG to ground the FT’d model with the latest indexed content
@@ -164,8 +157,6 @@ Rate limiting:
 - Successful acceptance returns 202 and logs progress lines prefixed with `[app.updater]`
 
 Manual triggers:
-- In the app sidebar, click “Run update now” (respects the daily limit)
-- From another terminal while the app is running:
 ```bash
 curl -X POST http://127.0.0.1:8799/update
 ```
@@ -204,15 +195,22 @@ In `ft` or `rag_ft` mode, the app prioritizes:
   - Adapter loaded at inference time, or merged weights used if desired
 
 This pairing gives:
-
 - Freshness via retrieval from the latest crawl/index
 - Domain fluency via LoRA adapter
 
-## Safety, Use, and Policies
+## Scripts (shortcuts)
 
-- Only answers grounded in Microsoft Defender for Endpoint docs should be returned. If missing/uncertain, the model is prompted to say it doesn’t know based on indexed documentation.
-- The crawler respects robots.txt and filters to the Defender for Endpoint section.
-- Do not use the system to generate harmful or policy-violating content.
+Initial steps (Crawl → Process → Index → Prepare dataset):
+```bash
+chmod +x scripts/setup_initial.sh
+./scripts/setup_initial.sh
+```
+
+Fine-tune and merge LoRA:
+```bash
+chmod +x scripts/finetune_and_merge.sh
+./scripts/finetune_and_merge.sh
+```
 
 ## Troubleshooting
 
@@ -225,8 +223,8 @@ This pairing gives:
 
 ## Clean/Reset Artifacts
 
+Warning: This removes local artifacts (rebuild as needed).
 ```bash
-# WARNING: This removes local artifacts (rebuild as needed)
 rm -rf data/raw data/processed data/index/chroma data/datasets models/adapters models/merges outputs
 ```
 
