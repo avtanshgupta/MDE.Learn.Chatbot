@@ -1,17 +1,21 @@
-name: Lint
+name: Lint (PR)
 
 on:
-  push:
-    branches:
-      - "**"
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - "**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   python-and-shell-lint:
     name: Python (ruff) and Shell (shfmt + shellcheck)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
@@ -22,31 +26,28 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install Python linter
+      - name: Install linters
         run: |
           python -m pip install --upgrade pip
           pip install ruff
-
-      - name: Ruff (Python)
-        run: |
-          ruff version
-          ruff check .
-
-      - name: Install Shell linters
-        run: |
           sudo apt-get update
           sudo apt-get install -y shellcheck
           sudo curl -sSLo /usr/local/bin/shfmt https://github.com/mvdan/sh/releases/download/v3.7.0/shfmt_v3.7.0_linux_amd64
           sudo chmod +x /usr/local/bin/shfmt
+          ruff --version
           shfmt -version
           shellcheck --version
 
-      - name: shfmt (Shell formatting check)
+      - name: Ruff (Python)
         run: |
-          # Check formatting (fails with diff if formatting is needed)
-          shfmt -d -i 2 -ci -s .
+          # Lint all tracked Python files (safe if none)
+          ruff check .
 
-      - name: shellcheck (Static analysis)
+      - name: shfmt (Shell formatting check on tracked files)
         run: |
-          # Analyze only shell files shfmt recognizes; noop if none
-          shfmt -f . | xargs -r shellcheck -x
+          # Only lint git-tracked shell files to avoid .venv/ etc.
+          git ls-files -z | grep -z -E '\.(sh|bash)$' | xargs -0 -r shfmt -d -i 2 -ci -s
+
+      - name: shellcheck (Static analysis on tracked files)
+        run: |
+          git ls-files -z | grep -z -E '\.(sh|bash)$' | xargs -0 -r shellcheck -x

@@ -63,7 +63,7 @@ requirements.txt
 
 ## Requirements
 
-- macOS on Apple Silicon (M-series)  
+- macOS on Apple Silicon (M-series)
 - Python 3.10+
 - Disk space for model, index, datasets
 - Xcode Command Line Tools recommended for wheels
@@ -204,8 +204,8 @@ python -m src.training.finetune_mlx --merge-only
 
 ### Adapter Loading Order (Inference)
 
-1) Load LoRA adapter from `finetune.out_dir` if present  
-2) Else use merged weights from `merge.out_dir`  
+1) Load LoRA adapter from `finetune.out_dir` if present
+2) Else use merged weights from `merge.out_dir`
 3) Else fall back to `model.base_id`
 
 ## Background Updates and HTTP /update

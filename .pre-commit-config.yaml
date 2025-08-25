@@ -1,6 +1,6 @@
 # Run Python and Shell linters via pre-commit (used locally and in CI)
 default_language_version:
-  python: python3.11
+  python: python
 
 exclude: |
   (?x)^(
@@ -16,7 +16,7 @@ exclude: |
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v6.0.0
     hooks:
       - id: check-yaml
       - id: end-of-file-fixer
@@ -25,20 +25,21 @@ repos:
         args: [--fix=lf]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.5.7
+    rev: v0.12.10
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
 
-  - repo: https://github.com/pre-commit/mirrors-shfmt
-    rev: v3.7.0
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.12.0-2
     hooks:
       - id: shfmt
-        args: [-d, -i, "2", -ci, -s]
+        # optional config:
+        # args: ["-i", "2", "-s", "-w"]
 
-  - repo: https://github.com/pre-commit/mirrors-shellcheck
-    rev: v0.10.0
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
     hooks:
       - id: shellcheck
         args: [-x]
