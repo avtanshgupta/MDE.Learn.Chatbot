@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 
 import streamlit as st
 
-# Ensure project root on sys.path when running "streamlit run src/app/app.py"
+# Ensure project root on sys.path when running "streamlit run src/app/streamlit_app.py"
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)

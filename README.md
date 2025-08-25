@@ -39,7 +39,7 @@ One-time setup with finetune+merge, then launch the app:
 chmod +x scripts/setup_initial.sh scripts/finetune.sh
 ./scripts/setup_initial.sh
 ./scripts/finetune.sh --merge      # one-time finetune + merge
-python -m streamlit run src/app/app.py
+python -m streamlit run src/app/streamlit_app.py
 ```
 
 Finetune only (no merge):
@@ -153,7 +153,7 @@ curl -X POST http://127.0.0.1:8799/update
 Default level: INFO. Enable DEBUG via CLI `--debug` or env:
 ```bash
 LOG_LEVEL=DEBUG python -m src.main index
-LOG_LEVEL=DEBUG python -m streamlit run src/app/app.py
+LOG_LEVEL=DEBUG python -m streamlit run src/app/streamlit_app.py
 ```
 
 ## Clean Reset
@@ -198,7 +198,7 @@ python -m src.main index
 
 - First run downloads multi-GB model shards: ensure stable network + disk space
 - Slow embeddings: MiniLM runs on CPU by default
-- Streamlit port in use: `python -m streamlit run src/app/app.py --server.port 8502`
+- Streamlit port in use: `python -m streamlit run src/app/streamlit_app.py --server.port 8502`
 - Chroma collection missing: `python -m src.main index`
 - mlx_lm API changes: inference falls back per guards in `src/inference/generate.py`
 

@@ -21,7 +21,7 @@ known-first-party = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"src/app/app.py" = ["E402"]
+"src/app/streamlit_app.py" = ["E402"]
 
 [tool.ruff.format]
 quote-style = "preserve"

@@ -88,9 +88,9 @@ def is_update_running() -> bool:
 def _run_update_pipeline(cfg) -> None:
     logger.info("Update pipeline start")
     # Lazy imports to avoid heavy startup
-    from src.crawler.crawler import crawl
+    from src.crawler.crawl import crawl
     from src.indexing.build_index import build_index
-    from src.processing.process import process as process_docs
+    from src.processing.process_docs import process as process_docs
     from src.training.finetune_mlx import finetune
     from src.training.prepare_dataset import main as prepare_dataset
 

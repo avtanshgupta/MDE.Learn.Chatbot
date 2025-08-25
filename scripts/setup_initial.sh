@@ -81,11 +81,11 @@ fi
 
 # Step 1: Crawl
 log "Step 1/4: Crawl MDE docs (robots-aware, filtered path)"
-"$PYTHON_BIN" -m src.crawler.crawler
+"$PYTHON_BIN" -m src.crawler.crawl
 
 # Step 2: Process
 log "Step 2/4: Process HTML to clean text and chunks"
-"$PYTHON_BIN" -m src.processing.process
+"$PYTHON_BIN" -m src.processing.process_docs
 
 # Step 3: Index
 log "Step 3/4: Build Chroma index with Sentence-Transformers embeddings"

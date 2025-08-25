@@ -26,7 +26,7 @@ def run_cmd(cmd: list[str]) -> int:
 
 def cmd_crawl(args: argparse.Namespace) -> None:
     logger.info("Starting crawl step")
-    import src.crawler.crawler as crawler
+    import src.crawler.crawl as crawler
 
     crawler.crawl()
     logger.info("Crawl step complete")
@@ -34,7 +34,7 @@ def cmd_crawl(args: argparse.Namespace) -> None:
 
 def cmd_process(args: argparse.Namespace) -> None:
     logger.info("Starting process step")
-    import src.processing.process as process
+    import src.processing.process_docs as process
 
     process.process()
     logger.info("Process step complete")
@@ -75,7 +75,7 @@ def cmd_merge(args: argparse.Namespace) -> None:
 def cmd_app(args: argparse.Namespace) -> None:
     # Launch Streamlit app
     logger.info("Launching Streamlit app via run_cmd")
-    code = run_cmd([sys.executable, "-m", "streamlit", "run", "src/app/app.py"])
+    code = run_cmd([sys.executable, "-m", "streamlit", "run", "src/app/streamlit_app.py"])
     if code != 0:
         logger.error("Streamlit exited with code=%s", code)
         sys.exit(code)
