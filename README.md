@@ -34,12 +34,17 @@ pip install -r requirements.txt
 
 ## Quickstart
 
-One-time setup, optional finetune+merge, then launch the app:
+One-time setup with finetune+merge, then launch the app:
 ```bash
-chmod +x scripts/setup_initial.sh scripts/finetune_and_merge.sh
+chmod +x scripts/setup_initial.sh scripts/finetune.sh
 ./scripts/setup_initial.sh
-./scripts/finetune_and_merge.sh   # optional; runs LoRA finetune + merge
+./scripts/finetune.sh --merge      # one-time finetune + merge
 python -m streamlit run src/app/app.py
+```
+
+Finetune only (no merge):
+```bash
+./scripts/finetune.sh
 ```
 
 Alternatively, use the Python CLI:

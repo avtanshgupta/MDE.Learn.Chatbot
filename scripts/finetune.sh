@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Run LoRA fine-tuning and then merge adapters into standalone weights.
+# Run LoRA fine-tuning, optionally merge adapters into standalone weights.
 # This script assumes you've already run the initial pipeline steps:
 #   1) Crawl  2) Process  3) Index  4) Prepare dataset
 #
 # Usage:
-#   ./scripts/finetune_and_merge.sh
-#   ./scripts/finetune_and_merge.sh --debug
-#   ./scripts/finetune_and_merge.sh --help
+#   ./scripts/finetune.sh
+#   ./scripts/finetune.sh --merge
+#   ./scripts/finetune.sh --debug
+#   ./scripts/finetune.sh --help
 #
 # Logging:
 # - Default log level is INFO.
@@ -26,6 +27,7 @@ cd "$REPO_ROOT"
 
 PYTHON_BIN="${PYTHON:-python}"
 DEBUG=0
+MERGE=0
 
 print_help() {
   cat <<EOF
@@ -33,13 +35,14 @@ Usage: $(basename "$0") [options]
 
 Runs:
   - LoRA fine-tuning with MLX
-  - Merge LoRA into standalone weights
+  - Optional: Merge LoRA into standalone weights (with -m|--merge)
 
 Pre-reqs:
   - Completed initial pipeline (crawl, process, index, prepare-dataset)
   - configs/config.yaml set appropriately
 
 Options:
+  -m, --merge    Merge adapters into standalone weights after finetune
   -d, --debug    Enable DEBUG logging (exports LOG_LEVEL=DEBUG)
   -h, --help     Show this help
 
@@ -59,6 +62,10 @@ while [[ $# -gt 0 ]]; do
       DEBUG=1
       shift
       ;;
+    -m | --merge)
+      MERGE=1
+      shift
+      ;;
     *)
       echo "Unknown argument: $1"
       echo "Try --help for usage."
@@ -68,7 +75,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 log() {
-  echo "[finetune_and_merge] $*"
+  echo "[finetune] $*"
 }
 
 # Logging level (propagate to Python)
@@ -88,17 +95,28 @@ else
 fi
 
 # Step: Finetune (LoRA, MLX)
-log "Step 1/2: Starting LoRA finetuning (MLX)"
+TOTAL=$((1 + MERGE))
+STEP=1
+log "Step $STEP/$TOTAL: Starting LoRA finetuning (MLX)"
 "$PYTHON_BIN" -m src.training.finetune_mlx
-log "Step 1/2: Finetune complete."
+log "Step $STEP/$TOTAL: Finetune complete."
 
-# Step: Merge adapters into standalone weights
-log "Step 2/2: Merging LoRA adapter into standalone weights"
-"$PYTHON_BIN" -m src.training.finetune_mlx --merge-only
-log "Step 2/2: Merge complete."
+if [[ $MERGE -eq 1 ]]; then
+  STEP=$((STEP + 1))
+  # Step: Merge adapters into standalone weights
+  log "Step $STEP/$TOTAL: Merging LoRA adapter into standalone weights"
+  "$PYTHON_BIN" -m src.training.finetune_mlx --merge-only
+  log "Step $STEP/$TOTAL: Merge complete."
+else
+  log "Merge step skipped (use --merge to enable)."
+fi
 
 log "Outputs:"
 log "- LoRA adapters: models/adapters/ (as configured in configs/config.yaml)"
-log "- Merged weights: models/merges/ (as configured in configs/config.yaml)"
+if [[ $MERGE -eq 1 ]]; then
+  log "- Merged weights: models/merges/ (as configured in configs/config.yaml)"
+else
+  log "- Merged weights: (skipped; run with --merge to produce)"
+fi
 
 exit 0
