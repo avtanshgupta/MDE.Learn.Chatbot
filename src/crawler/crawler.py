@@ -6,10 +6,13 @@ from urllib.parse import urljoin, urlunparse
 from urllib import robotparser
 from bs4 import BeautifulSoup
 from typing import Set, List, Dict, Tuple
+import logging
 
 from src.utils.config import load_config, ensure_dir, url_to_filename, save_json
+from src.utils.logging_setup import setup_logging
 
-print("[crawler] Module loaded")
+setup_logging()
+logger = logging.getLogger(__name__)
 
 def normalize_url(url: str) -> str:
     """Normalize URL by removing fragments and normalizing scheme/host."""
@@ -18,8 +21,7 @@ def normalize_url(url: str) -> str:
     netloc = normalized.netloc.lower()
     scheme = normalized.scheme.lower()
     out = urlunparse((scheme, netloc, normalized.path, normalized.params, normalized.query, ""))
-    # Debug (comment to reduce noise if needed)
-    # print(f"[crawler] normalize_url: {url} -> {out}")
+    # logger.debug("normalize_url: %s -> %s", url, out)
     return out
 
 def is_allowed(url: str, cfg: dict, rp: robotparser.RobotFileParser) -> bool:
@@ -71,17 +73,17 @@ def extract_links(html: str, base_url: str) -> List[str]:
             continue
         abs_url = urljoin(base_url, href)
         hrefs.append(normalize_url(abs_url))
-    print(f"[crawler] extract_links: found={len(hrefs)} base={base_url}")
+    logger.debug("extract_links: found=%d base=%s", len(hrefs), base_url)
     return hrefs
 
 def fetch(client: httpx.Client, url: str, timeout: int) -> Tuple[int, str]:
     """Fetch a URL and return (status_code, text)."""
     try:
         r = client.get(url, timeout=timeout, follow_redirects=True)
-        print(f"[crawler] fetch: {url} -> status={r.status_code} bytes={len(r.content) if r.content else 0}")
+        logger.debug("fetch: %s -> status=%s bytes=%s", url, r.status_code, len(r.content) if r.content else 0)
         return r.status_code, r.text if r.status_code == 200 else ""
     except Exception as e:
-        print(f"[crawler] fetch error: {url} -> {e}")
+        logger.warning("fetch error: %s -> %s", url, e)
         return 0, ""
 
 def crawl() -> None:
@@ -97,7 +99,7 @@ def crawl() -> None:
     ensure_dir(raw_html_dir)
     ensure_dir(url_manifest_path.rsplit("/", 1)[0])
 
-    print(f"[crawler] Start crawl base={base_url} max_pages={max_pages} timeout={timeout_sec}s sleep={sleep_s}s")
+    logger.info("Start crawl base=%s max_pages=%s timeout=%ss sleep=%ss", base_url, max_pages, timeout_sec, sleep_s)
 
     # robots.txt
     rp = robotparser.RobotFileParser()
@@ -105,9 +107,9 @@ def crawl() -> None:
     try:
         rp.set_url(robots_url)
         rp.read()
-        print(f"[crawler] robots.txt loaded: {robots_url}")
+        logger.debug("robots.txt loaded: %s", robots_url)
     except Exception as e:
-        print(f"[crawler] robots.txt load failed: {robots_url} -> {e}")
+        logger.warning("robots.txt load failed: %s -> %s", robots_url, e)
 
     start = normalize_url(base_url)
     queue: List[str] = [start]
@@ -124,14 +126,14 @@ def crawl() -> None:
             seen.add(url)
 
             if not is_allowed(url, cfg, rp):
-                # print(f"[crawler] skip (not allowed): {url}")
+                # logger.debug("skip (not allowed): %s", url)
                 continue
 
-            print(f"[crawler] Visiting ({len(seen)}/{max_pages}): {url}")
+            logger.debug("Visiting (%d/%d): %s", len(seen), max_pages, url)
 
             status, html = fetch(client, url, timeout_sec)
             if status != 200 or not html:
-                print(f"[crawler] skip (bad status or empty): {url}")
+                logger.debug("skip (bad status or empty): %s", url)
                 continue
 
             # store raw html
@@ -139,7 +141,7 @@ def crawl() -> None:
             fpath = f"{raw_html_dir}/{fname}"
             with open(fpath, "w", encoding="utf-8") as f:
                 f.write(html)
-            print(f"[crawler] saved: {fpath}")
+            logger.debug("saved: %s", fpath)
 
             manifest.append({"url": url, "path": fpath})
 
@@ -150,16 +152,16 @@ def crawl() -> None:
                 if link not in seen:
                     queue.append(link)
                     added += 1
-            print(f"[crawler] queued +{added}, queue_size={len(queue)}")
+            logger.debug("queued +%d, queue_size=%d", added, len(queue))
 
             # polite crawling
             if sleep_s > 0:
-                print(f"[crawler] sleep {sleep_s}s")
+                logger.debug("sleep %ss", sleep_s)
                 time.sleep(sleep_s)
 
     # Save manifest
     save_json(manifest, url_manifest_path)
-    print(f"[crawler] DONE. pages_saved={len(manifest)} manifest={url_manifest_path}")
+    logger.info("DONE. pages_saved=%d manifest=%s", len(manifest), url_manifest_path)
 
 if __name__ == "__main__":
     crawl()

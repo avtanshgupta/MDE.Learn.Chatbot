@@ -231,10 +231,49 @@ curl -X POST http://127.0.0.1:8799/update
 - Model load issues: confirm `mlx` and `mlx-lm` installed; allow base model download on first run.
 - Torch wheels on macOS: CPU-only embeddings are fine; upgrade pip and retry if needed.
 
+### Logging
+
+- Default log level is INFO.
+- Enable DEBUG logs:
+  - Shell scripts:
+    ```bash
+    ./scripts/setup_initial.sh --debug
+    ./scripts/finetune_and_merge.sh --debug
+    ```
+  - Python CLI entrypoint:
+    ```bash
+    python -m src.main --debug crawl
+    python -m src.main --debug process
+    python -m src.main --debug index
+    python -m src.main --debug prepare-dataset
+    python -m src.main --debug finetune
+    python -m src.main --debug merge
+    ```
+  - Environment variable (works for any Python run, including Streamlit):
+    ```bash
+    LOG_LEVEL=DEBUG python -m streamlit run src/app/app.py
+    ```
+- Logs print to your terminal/VS Code Output pane. To persist logs, redirect output:
+  ```bash
+  ./scripts/setup_initial.sh --debug | tee outputs/setup_initial.log
+  ```
+
 ## Clean / Reset
 
 Warning: removes generated artifacts.
 
+Recommended:
+```bash
+chmod +x scripts/clean_reset.sh
+./scripts/clean_reset.sh --yes
+```
+
+Options:
+- --dry-run to preview deletions
+- --debug for verbose output
+- --yes to skip confirmation
+
+Manual alternative:
 ```bash
 rm -rf data/raw data/processed data/index/chroma data/datasets models/adapters models/merges outputs
 ```

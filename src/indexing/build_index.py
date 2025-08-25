@@ -1,5 +1,6 @@
 import os
 import json
+import logging
 from typing import List, Dict, Any
 
 import chromadb
@@ -10,13 +11,13 @@ from tqdm import tqdm
 
 from src.utils.config import load_config, ensure_dir
 
-print("[indexing] Module loaded")
+logger = logging.getLogger(__name__)
 
 def load_chunks(chunks_path: str) -> List[Dict[str, Any]]:
-    print(f"[indexing] load_chunks <- {chunks_path}")
+    logger.info("load_chunks <- %s", chunks_path)
     chunks: List[Dict[str, Any]] = []
     if not os.path.exists(chunks_path):
-        print(f"[indexing] chunks file missing: {chunks_path}")
+        logger.warning("chunks file missing: %s", chunks_path)
         return chunks
     with open(chunks_path, "r", encoding="utf-8") as f:
         for line in f:
@@ -28,9 +29,9 @@ def load_chunks(chunks_path: str) -> List[Dict[str, Any]]:
                 if "text" in rec and rec["text"]:
                     chunks.append(rec)
             except Exception as e:
-                print(f"[indexing] bad json line skipped: {e}")
+                logger.debug("bad json line skipped: %s", e)
                 continue
-    print(f"[indexing] load_chunks -> {len(chunks)} records")
+    logger.info("load_chunks -> %d records", len(chunks))
     return chunks
 
 def build_index() -> None:
@@ -41,31 +42,31 @@ def build_index() -> None:
     batch = int(cfg["index"]["embedding_batch"])
 
     ensure_dir(persist_dir)
-    print(f"[indexing] build_index -> persist_dir={persist_dir} collection={collection_name} batch={batch}")
+    logger.info("build_index -> persist_dir=%s collection=%s batch=%d", persist_dir, collection_name, batch)
 
     client = chromadb.PersistentClient(path=persist_dir, settings=Settings(allow_reset=False))
     try:
         collection = client.get_collection(collection_name)
-        print(f"[indexing] using existing collection: {collection_name}")
+        logger.info("using existing collection: %s", collection_name)
     except Exception:
         collection = client.create_collection(name=collection_name, metadata={"hnsw:space": "cosine"})
-        print(f"[indexing] created new collection: {collection_name}")
+        logger.info("created new collection: %s", collection_name)
 
     # Load data
     chunks_path = cfg["data"]["chunks_path"]
     records = load_chunks(chunks_path)
     if not records:
-        print(f"[indexing] No chunks found at {chunks_path}. Run processing first.")
+        logger.warning("No chunks found at %s. Run processing first.", chunks_path)
         return
 
     # Embedding model
-    print(f"[indexing] Loading embedding model: {embed_model_id}")
+    logger.info("Loading embedding model: %s", embed_model_id)
     embedder = SentenceTransformer(embed_model_id)
-    print(f"[indexing] Embedding model loaded.")
+    logger.info("Embedding model loaded.")
 
     # Prepare and upsert in batches
     ids, texts, metas = [], [], []
-    print(f"[indexing] Collecting {len(records)} records for upsert")
+    logger.info("Collecting %d records for upsert", len(records))
     for rec in tqdm(records, desc="[indexing] Collecting"):
         uid = f'{rec["url"]}#chunk-{rec["chunk_id"]}'
         ids.append(uid)
@@ -78,7 +79,7 @@ def build_index() -> None:
         })
 
     total = len(texts)
-    print(f"[indexing] Embedding & upserting total={total} batch={batch}")
+    logger.info("Embedding & upserting total=%d batch=%d", total, batch)
     for i in tqdm(range(0, total, batch), desc="[indexing] Embedding"):
         batch_texts = texts[i:i+batch]
         batch_ids = ids[i:i+batch]
@@ -86,9 +87,9 @@ def build_index() -> None:
         embs = embedder.encode(batch_texts, show_progress_bar=False, normalize_embeddings=True)
         embs_list = [e.astype(np.float32).tolist() for e in embs]
         collection.upsert(ids=batch_ids, embeddings=embs_list, metadatas=batch_metas, documents=batch_texts)
-        print(f"[indexing] upserted: {i}..{i+len(batch_texts)-1}")
+        logger.debug("upserted: %d..%d", i, i + len(batch_texts) - 1)
 
-    print("[indexing] Indexing complete.")
+    logger.info("Indexing complete.")
 
 if __name__ == "__main__":
     build_index()

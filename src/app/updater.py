@@ -2,8 +2,11 @@ import os
 import json
 import time
 import threading
+import logging
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Callable, Tuple, Optional
+
+logger = logging.getLogger(__name__)
 
 # Utilities for last-run tracking
 
@@ -24,7 +27,7 @@ def _write_last_run(path: str, ts: float) -> None:
         with open(path, "w", encoding="utf-8") as f:
             json.dump({"last_run": ts}, f)
     except Exception as e:
-        print(f"[app.updater] Failed to write last_run file: {e}")
+        logger.error("Failed to write last_run file: %s", e)
 
 def _now() -> float:
     return time.time()
@@ -70,7 +73,7 @@ def is_update_running() -> bool:
     return _is_running()
 
 def _run_update_pipeline(cfg) -> None:
-    print("[app.updater] Update pipeline start")
+    logger.info("Update pipeline start")
     # Lazy imports to avoid heavy startup
     from src.crawler.crawler import crawl
     from src.processing.process import process as process_docs
@@ -79,36 +82,36 @@ def _run_update_pipeline(cfg) -> None:
     from src.training.finetune_mlx import finetune
 
     try:
-        print("[app.updater] Step: crawl")
+        logger.info("Step: crawl")
         crawl()
     except Exception as e:
-        print(f"[app.updater] crawl failed: {e}")
+        logger.exception("crawl failed: %s", e)
 
     try:
-        print("[app.updater] Step: process")
+        logger.info("Step: process")
         process_docs()
     except Exception as e:
-        print(f"[app.updater] process failed: {e}")
+        logger.exception("process failed: %s", e)
 
     try:
-        print("[app.updater] Step: index")
+        logger.info("Step: index")
         build_index()
     except Exception as e:
-        print(f"[app.updater] index failed: {e}")
+        logger.exception("index failed: %s", e)
 
     try:
-        print("[app.updater] Step: prepare_dataset")
+        logger.info("Step: prepare_dataset")
         prepare_dataset()
     except Exception as e:
-        print(f"[app.updater] prepare_dataset failed: {e}")
+        logger.exception("prepare_dataset failed: %s", e)
 
     try:
-        print("[app.updater] Step: finetune (LoRA)")
+        logger.info("Step: finetune (LoRA)")
         finetune()
     except Exception as e:
-        print(f"[app.updater] finetune failed: {e}")
+        logger.exception("finetune failed: %s", e)
 
-    print("[app.updater] Update pipeline end")
+    logger.info("Update pipeline end")
 
 def _run_thread(cfg, on_complete: Optional[Callable[[], None]]) -> None:
     _set_running(True)
@@ -119,7 +122,7 @@ def _run_thread(cfg, on_complete: Optional[Callable[[], None]]) -> None:
             try:
                 on_complete()
             except Exception as e:
-                print(f"[app.updater] on_complete failed: {e}")
+                logger.exception("on_complete failed: %s", e)
     finally:
         _set_running(False)
 
@@ -160,8 +163,8 @@ class _UpdateHandler(BaseHTTPRequestHandler):
         self.wfile.write(msg.encode("utf-8"))
 
     def log_message(self, format, *args):
-        # Silence default noisy logging
-        print(f"[app.updater] HTTP: " + format % args)
+        # Reduce default noisy logging
+        logger.info("HTTP: " + format, *args)
 
 def start_http_server(cfg, on_complete: Optional[Callable[[], None]] = None) -> None:
     host = cfg["update"]["api_host"]
@@ -171,16 +174,16 @@ def start_http_server(cfg, on_complete: Optional[Callable[[], None]] = None) -> 
             server = HTTPServer((host, port), _UpdateHandler)
             _UpdateHandler.cfg = cfg
             _UpdateHandler.on_complete = on_complete
-            print(f"[app.updater] HTTP update server on http://{host}:{port} (POST /update)")
+            logger.info("HTTP update server on http://%s:%s (POST /update)", host, port)
             server.serve_forever()
         except Exception as e:
-            print(f"[app.updater] HTTP server failed: {e}")
+            logger.exception("HTTP server failed: %s", e)
     th = threading.Thread(target=_srv, daemon=True)
     th.start()
 
 def start_scheduler(cfg, on_complete: Optional[Callable[[], None]] = None) -> None:
     def _loop():
-        print("[app.updater] Daily scheduler started")
+        logger.info("Daily scheduler started")
         while True:
             # If last_run is missing but fine-tuned weights already exist, set a baseline
             try:
@@ -190,14 +193,14 @@ def start_scheduler(cfg, on_complete: Optional[Callable[[], None]] = None) -> No
                 adapter_present = bool(adapter_dir) and os.path.isdir(adapter_dir) and bool(os.listdir(adapter_dir))
                 merged_present = bool(merged_dir) and os.path.isdir(merged_dir) and bool(os.listdir(merged_dir))
                 if last is None and (adapter_present or merged_present):
-                    print("[app.updater] Baseline last_run set at startup (pre-trained weights present); waiting for next interval")
+                    logger.info("Baseline last_run set at startup (pre-trained weights present); waiting for next interval")
                     _write_last_run(cfg["update"]["last_run_file"], _now())
             except Exception as e:
-                print(f"[app.updater] Scheduler pre-check failed: {e}")
+                logger.exception("Scheduler pre-check failed: %s", e)
 
             ok, rem = can_run_update(cfg)
             if ok:
-                print("[app.updater] Scheduler triggering update")
+                logger.info("Scheduler triggering update")
                 trigger_update(cfg, on_complete)
                 # Sleep at least min_interval to avoid immediate re-run
                 sleep_sec = max(3600, int(float(cfg["update"]["min_interval_hours"]) * 3600))
@@ -209,7 +212,7 @@ def start_scheduler(cfg, on_complete: Optional[Callable[[], None]] = None) -> No
 
 def start_background_services(cfg, on_complete: Optional[Callable[[], None]] = None) -> None:
     if not cfg.get("update", {}).get("enabled", False):
-        print("[app.updater] Update services disabled via config")
+        logger.info("Update services disabled via config")
         return
     start_http_server(cfg, on_complete)
     start_scheduler(cfg, on_complete)

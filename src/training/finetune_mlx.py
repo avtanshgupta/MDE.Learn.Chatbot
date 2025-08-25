@@ -1,18 +1,19 @@
 import os
 import subprocess
 import sys
+import logging
 from typing import List
 
 from src.utils.config import load_config, ensure_dir
 
-print("[training.finetune_mlx] Module loaded")
+logger = logging.getLogger(__name__)
 
 def run(cmd: List[str]) -> int:
-    print("[training.finetune_mlx] Running command:", " ".join(cmd))
+    logger.info("Running command: %s", " ".join(cmd))
     proc = subprocess.Popen(cmd)
     proc.communicate()
     code = proc.returncode
-    print(f"[training.finetune_mlx] Command finished with code={code}")
+    logger.info("Command finished with code=%s", code)
     return code
 
 def finetune() -> None:
@@ -35,13 +36,13 @@ def finetune() -> None:
 
     ensure_dir(out_dir)
 
-    print("[training.finetune_mlx] Finetune start ->")
-    print(f"  model={base_id}")
-    print(f"  train={train_path}")
-    print(f"  val={val_path}")
-    print(f"  out_dir={out_dir}")
-    print(f"  epochs={epochs} batch={batch_size} accumulate={accumulate} lr={lr}")
-    print(f"  lora: r={r} alpha={alpha} dropout={dropout}")
+    logger.info("Finetune start ->")
+    logger.info("  model=%s", base_id)
+    logger.info("  train=%s", train_path)
+    logger.info("  val=%s", val_path)
+    logger.info("  out_dir=%s", out_dir)
+    logger.info("  epochs=%s batch=%s accumulate=%s lr=%s", epochs, batch_size, accumulate, lr)
+    logger.info("  lora: r=%s alpha=%s dropout=%s", r, alpha, dropout)
 
     # Prepare mlx_lm lora dataset directory with expected filenames
     lora_data_dir = os.path.join(os.path.dirname(train_path), "lora_data")
@@ -54,11 +55,11 @@ def finetune() -> None:
             if os.path.islink(dst) or os.path.exists(dst):
                 os.remove(dst)
             os.symlink(os.path.abspath(src), dst)
-            print(f"[training.finetune_mlx] Symlinked {dst} -> {src}")
+            logger.debug("Symlinked %s -> %s", dst, src)
         except Exception as e:
             import shutil
             shutil.copyfile(src, dst)
-            print(f"[training.finetune_mlx] Copied {src} -> {dst} (symlink failed: {e})")
+            logger.debug("Copied %s -> %s (symlink failed: %s)", src, dst, e)
 
     # Uses mlx_lm lora subcommand (LoRA fine-tuning)
     # Note: Recent mlx-lm versions use 'lora' with --data directory (containing train.jsonl/valid.jsonl)
@@ -75,9 +76,9 @@ def finetune() -> None:
 
     code = run(cmd)
     if code != 0:
-        print("[training.finetune_mlx] Finetune failed.")
+        logger.error("Finetune failed with code=%s", code)
         sys.exit(code)
-    print(f"[training.finetune_mlx] Finetune DONE. LoRA adapter saved to: {out_dir}")
+    logger.info("Finetune DONE. LoRA adapter saved to: %s", out_dir)
 
 def merge() -> None:
     cfg = load_config()
@@ -87,10 +88,10 @@ def merge() -> None:
 
     ensure_dir(out_dir)
 
-    print("[training.finetune_mlx] Merge start ->")
-    print(f"  base={base_id}")
-    print(f"  adapter={adapter_dir}")
-    print(f"  out_dir={out_dir}")
+    logger.info("Merge start ->")
+    logger.info("  base=%s", base_id)
+    logger.info("  adapter=%s", adapter_dir)
+    logger.info("  out_dir=%s", out_dir)
 
     # Merge LoRA into a new model folder for standalone inference (optional; for FT-only mode)
     cmd = [
@@ -101,9 +102,9 @@ def merge() -> None:
     ]
     code = run(cmd)
     if code != 0:
-        print("[training.finetune_mlx] Merge failed.")
+        logger.error("Merge failed with code=%s", code)
         sys.exit(code)
-    print(f"[training.finetune_mlx] Merge DONE. Merged model saved to: {out_dir}")
+    logger.info("Merge DONE. Merged model saved to: %s", out_dir)
 
 if __name__ == "__main__":
     import argparse

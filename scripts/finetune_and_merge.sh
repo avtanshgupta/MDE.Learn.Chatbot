@@ -5,7 +5,12 @@
 #
 # Usage:
 #   ./scripts/finetune_and_merge.sh
+#   ./scripts/finetune_and_merge.sh --debug
 #   ./scripts/finetune_and_merge.sh --help
+#
+# Logging:
+# - Default log level is INFO.
+# - Pass --debug to enable DEBUG logs across Python steps (sets LOG_LEVEL=DEBUG).
 #
 # Notes:
 # - Activate your virtual environment first:
@@ -20,10 +25,11 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 PYTHON_BIN="${PYTHON:-python}"
+DEBUG=0
 
 print_help() {
   cat <<EOF
-Usage: $(basename "$0")
+Usage: $(basename "$0") [options]
 
 Runs:
   - LoRA fine-tuning with MLX
@@ -34,7 +40,8 @@ Pre-reqs:
   - configs/config.yaml set appropriately
 
 Options:
-  -h, --help    Show this help
+  -d, --debug    Enable DEBUG logging (exports LOG_LEVEL=DEBUG)
+  -h, --help     Show this help
 
 Notes:
   - Uses 'python -m src.training.finetune_mlx' for finetune
@@ -48,6 +55,10 @@ while [[ $# -gt 0 ]]; do
       print_help
       exit 0
       ;;
+    -d|--debug)
+      DEBUG=1
+      shift
+      ;;
     *)
       echo "Unknown argument: $1"
       echo "Try --help for usage."
@@ -59,6 +70,12 @@ done
 log() {
   echo "[finetune_and_merge] $*"
 }
+
+# Logging level (propagate to Python)
+if [[ "$DEBUG" -eq 1 ]]; then
+  export LOG_LEVEL=DEBUG
+  log "Debug logging enabled (LOG_LEVEL=DEBUG)"
+fi
 
 # Basic environment info
 log "Repository root: $REPO_ROOT"

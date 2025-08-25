@@ -2,70 +2,76 @@ import os
 import sys
 import subprocess
 import argparse
+import logging
+from src.utils.logging_setup import setup_logging
 
 # Ensure project root on sys.path
 PROJECT_ROOT = os.path.abspath(os.path.dirname(__file__))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+setup_logging()
+logger = logging.getLogger(__name__)
+
 def run_cmd(cmd: list[str]) -> int:
-    print(f"[main] Running command: {' '.join(cmd)}")
+    logger.info("Running command: %s", " ".join(cmd))
     proc = subprocess.Popen(cmd)
     proc.communicate()
     code = proc.returncode
-    print(f"[main] Command exited with code={code}")
+    logger.info("Command exited with code=%s", code)
     return code
 
 def cmd_crawl(args: argparse.Namespace) -> None:
-    print("[main] Starting crawl step")
+    logger.info("Starting crawl step")
     import src.crawler.crawler as crawler
     crawler.crawl()
-    print("[main] Crawl step complete")
+    logger.info("Crawl step complete")
 
 def cmd_process(args: argparse.Namespace) -> None:
-    print("[main] Starting process step")
+    logger.info("Starting process step")
     import src.processing.process as process
     process.process()
-    print("[main] Process step complete")
+    logger.info("Process step complete")
 
 def cmd_index(args: argparse.Namespace) -> None:
-    print("[main] Starting index step")
+    logger.info("Starting index step")
     import src.indexing.build_index as build_index
     build_index.build_index()
-    print("[main] Index step complete")
+    logger.info("Index step complete")
 
 def cmd_prepare_dataset(args: argparse.Namespace) -> None:
-    print("[main] Starting dataset preparation step")
+    logger.info("Starting dataset preparation step")
     import src.training.prepare_dataset as prep
     prep.main()
-    print("[main] Dataset preparation step complete")
+    logger.info("Dataset preparation step complete")
 
 def cmd_finetune(args: argparse.Namespace) -> None:
-    print("[main] Starting finetune step")
+    logger.info("Starting finetune step")
     import src.training.finetune_mlx as ft
     ft.finetune()
-    print("[main] Finetune step complete")
+    logger.info("Finetune step complete")
 
 def cmd_merge(args: argparse.Namespace) -> None:
-    print("[main] Starting merge step")
+    logger.info("Starting merge step")
     import src.training.finetune_mlx as ft
     ft.merge()
-    print("[main] Merge step complete")
+    logger.info("Merge step complete")
 
 def cmd_app(args: argparse.Namespace) -> None:
     # Launch Streamlit app
-    print("[main] Launching Streamlit app via run_cmd")
+    logger.info("Launching Streamlit app via run_cmd")
     code = run_cmd([sys.executable, "-m", "streamlit", "run", "src/app/app.py"])
     if code != 0:
-        print(f"[main] Streamlit exited with code={code}")
+        logger.error("Streamlit exited with code=%s", code)
         sys.exit(code)
     else:
-        print("[main] Streamlit exited cleanly")
+        logger.info("Streamlit exited cleanly")
 
 def main() -> None:
-    print("[main] Parsing CLI arguments")
-    print(f"[main] argv: {' '.join(sys.argv)}")
+    logger.info("Parsing CLI arguments")
+    logger.debug("argv: %s", " ".join(sys.argv))
     ap = argparse.ArgumentParser(description="MDE Learn Chatbot pipeline")
+    ap.add_argument("--debug", "-d", action="store_true", help="Enable debug logging")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("crawl", help="Crawl MDE docs").set_defaults(fn=cmd_crawl)
@@ -77,13 +83,17 @@ def main() -> None:
     sub.add_parser("app", help="Start Streamlit app").set_defaults(fn=cmd_app)
 
     args = ap.parse_args()
-    print(f"[main] Selected command: {args.cmd}")
-    print("[main] Dispatching to subcommand handler")
+    if getattr(args, "debug", False):
+        logging.getLogger().setLevel(logging.DEBUG)
+        logger.setLevel(logging.DEBUG)
+        logger.debug("Debug logging enabled")
+    logger.info("Selected command: %s", args.cmd)
+    logger.info("Dispatching to subcommand handler")
     try:
         args.fn(args)
-        print("[main] Subcommand completed successfully")
-    except Exception as e:
-        print(f"[main] Subcommand raised an exception: {e}")
+        logger.info("Subcommand completed successfully")
+    except Exception:
+        logger.exception("Subcommand raised an exception")
         raise
 
 if __name__ == "__main__":

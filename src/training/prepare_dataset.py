@@ -1,17 +1,18 @@
 import json
 import os
 import random
+import logging
 from typing import List, Dict, Any, Tuple
 
 from src.utils.config import load_config, ensure_dir, read_json
 
-print("[training.prepare_dataset] Module loaded")
+logger = logging.getLogger(__name__)
 
 def load_chunks(path: str) -> List[Dict[str, Any]]:
-    print(f"[training.prepare_dataset] load_chunks <- {path}")
+    logger.info("load_chunks <- %s", path)
     records: List[Dict[str, Any]] = []
     if not os.path.exists(path):
-        print(f"[training.prepare_dataset] chunks file missing: {path}")
+        logger.warning("chunks file missing: %s", path)
         return records
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
@@ -23,9 +24,9 @@ def load_chunks(path: str) -> List[Dict[str, Any]]:
                 if rec.get("text"):
                     records.append(rec)
             except Exception as e:
-                print(f"[training.prepare_dataset] bad json line skipped: {e}")
+                logger.debug("bad json line skipped: %s", e)
                 continue
-    print(f"[training.prepare_dataset] load_chunks -> {len(records)} records")
+    logger.info("load_chunks -> %d records", len(records))
     return records
 
 def build_clm_text(rec: Dict[str, Any]) -> str:
@@ -41,7 +42,7 @@ def build_clm_text(rec: Dict[str, Any]) -> str:
     return f"{prefix}{text}\n\n"
 
 def split_dataset(records: List[Dict[str, Any]], val_ratio: float, seed: int) -> Tuple[List[str], List[str]]:
-    print(f"[training.prepare_dataset] split_dataset: total={len(records)} val_ratio={val_ratio} seed={seed}")
+    logger.info("split_dataset: total=%d val_ratio=%.3f seed=%d", len(records), val_ratio, seed)
     random.Random(seed).shuffle(records)
     n = len(records)
     n_val = int(n * val_ratio)
@@ -49,19 +50,19 @@ def split_dataset(records: List[Dict[str, Any]], val_ratio: float, seed: int) ->
     train = records[n_val:]
     train_texts = [build_clm_text(r) for r in train]
     val_texts = [build_clm_text(r) for r in val]
-    print(f"[training.prepare_dataset] split -> train={len(train_texts)} val={len(val_texts)}")
+    logger.info("split -> train=%d val=%d", len(train_texts), len(val_texts))
     return train_texts, val_texts
 
 def cap_samples(samples: List[str], cap: int | None) -> List[str]:
     if cap is None:
         return samples
     capped = samples[: max(0, cap)]
-    print(f"[training.prepare_dataset] cap_samples: cap={cap} -> {len(capped)}")
+    logger.info("cap_samples: cap=%s -> %d", cap, len(capped))
     return capped
 
 def write_jsonl_texts(texts: List[str], path: str) -> None:
     ensure_dir(os.path.dirname(path))
-    print(f"[training.prepare_dataset] write_jsonl_texts -> {path} count={len(texts)}")
+    logger.info("write_jsonl_texts -> %s count=%d", path, len(texts))
     with open(path, "w", encoding="utf-8") as f:
         for t in texts:
             f.write(json.dumps({"text": t}, ensure_ascii=False) + "\n")
@@ -69,7 +70,7 @@ def write_jsonl_texts(texts: List[str], path: str) -> None:
         size = os.path.getsize(path)
     except Exception:
         size = None
-    print(f"[training.prepare_dataset] wrote {len(texts)} lines (bytes={size}) to {path}")
+    logger.info("wrote %d lines (bytes=%s) to %s", len(texts), size, path)
 
 def main() -> None:
     cfg = load_config()
@@ -80,22 +81,22 @@ def main() -> None:
     max_train = cfg["finetune"].get("max_train_samples")
     seed = int(cfg["project"]["seed"])
 
-    print(f"[training.prepare_dataset] start -> chunks={chunks_path}")
+    logger.info("start -> chunks=%s", chunks_path)
     chunks = load_chunks(chunks_path)
     if not chunks:
-        print("[training.prepare_dataset] No chunks found. Run crawler and processing first.")
+        logger.warning("No chunks found. Run crawler and processing first.")
         return
 
     train_texts, val_texts = split_dataset(chunks, val_ratio, seed)
     train_texts = cap_samples(train_texts, max_train if isinstance(max_train, int) else None)
 
-    print(f"[training.prepare_dataset] writing train ({len(train_texts)}) -> {out_train}")
+    logger.info("writing train (%d) -> %s", len(train_texts), out_train)
     write_jsonl_texts(train_texts, out_train)
 
-    print(f"[training.prepare_dataset] writing val ({len(val_texts)}) -> {out_val}")
+    logger.info("writing val (%d) -> %s", len(val_texts), out_val)
     write_jsonl_texts(val_texts, out_val)
 
-    print("[training.prepare_dataset] DONE")
+    logger.info("DONE")
 
 if __name__ == "__main__":
     main()

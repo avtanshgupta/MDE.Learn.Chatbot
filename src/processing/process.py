@@ -2,13 +2,14 @@ import os
 import re
 import json
 from typing import List, Dict, Any, Tuple
+import logging
 
 from bs4 import BeautifulSoup
 from readability import Document
 
 from src.utils.config import load_config, ensure_dir, read_json
 
-print("[processing] Module loaded")
+logger = logging.getLogger(__name__)
 
 BLOCK_TAGS = {"script", "style", "nav", "footer", "header", "noscript", "aside", "form"}
 
@@ -19,11 +20,11 @@ def html_to_text(html: str) -> Tuple[str, str]:
         title = doc.short_title() or ""
         summary_html = doc.summary(html_partial=True)
         soup = BeautifulSoup(summary_html, "lxml")
-        print(f"[processing] readability extracted title='{title[:80]}'")
+        logger.debug("readability extracted title='%s'", title[:80])
     except Exception as e:
         soup = BeautifulSoup(html, "lxml")
         title = soup.title.text.strip() if soup.title else ""
-        print(f"[processing] readability failed, fallback bs4 title='{title[:80]}', err={e}")
+        logger.debug("readability failed, fallback bs4 title='%s', err=%s", title[:80], e)
 
     # remove non-content blocks
     removed = 0
@@ -31,7 +32,7 @@ def html_to_text(html: str) -> Tuple[str, str]:
         tag.decompose()
         removed += 1
     if removed:
-        print(f"[processing] removed non-content blocks: {removed}")
+        logger.debug("removed non-content blocks: %d", removed)
 
     # get visible text
     text_parts: List[str] = []
@@ -42,7 +43,7 @@ def html_to_text(html: str) -> Tuple[str, str]:
 
     text = "\n".join(text_parts)
     text = normalize_whitespace(text)
-    print(f"[processing] html_to_text: paragraphs={len(text_parts)} chars={len(text)}")
+    logger.debug("html_to_text: paragraphs=%d chars=%d", len(text_parts), len(text))
     return title, text
 
 def normalize_whitespace(s: str) -> str:
@@ -57,7 +58,7 @@ def chunk_text(text: str, max_len: int, overlap: int) -> List[str]:
     chunks: List[str] = []
     cur: List[str] = []
     cur_len = 0
-    print(f"[processing] chunk_text: paras={len(paras)} max_len={max_len} overlap={overlap}")
+    logger.debug("chunk_text: paras=%d max_len=%d overlap=%d", len(paras), max_len, overlap)
 
     for p in paras:
         p_len = len(p) + 2  # account for newline join
@@ -89,10 +90,11 @@ def chunk_text(text: str, max_len: int, overlap: int) -> List[str]:
             trimmed.append(c)
         else:
             # hard split if a single paragraph overflowed
-            for i in range(0, len(c), max_len - overlap if overlap < max_len else max_len):
+            step = max_len - overlap if overlap < max_len else max_len
+            for i in range(0, len(c), step):
                 trimmed.append(c[i:i + max_len])
 
-    print(f"[processing] chunk_text: chunks={len(trimmed)}")
+    logger.debug("chunk_text: chunks=%d", len(trimmed))
     return trimmed
 
 def process() -> None:
@@ -106,10 +108,10 @@ def process() -> None:
     overlap = int(cfg["processing"]["chunk_overlap_chars"])
 
     ensure_dir(os.path.dirname(chunks_path))
-    print(f"[processing] start -> manifest={manifest_path} chunks_out={chunks_path}")
+    logger.info("start -> manifest=%s chunks_out=%s", manifest_path, chunks_path)
 
     manifest: List[Dict[str, Any]] = read_json(manifest_path) if os.path.exists(manifest_path) else []
-    print(f"[processing] manifest entries: {len(manifest)}")
+    logger.info("manifest entries: %d", len(manifest))
 
     out_f = open(chunks_path, "w", encoding="utf-8")
     count_pages, count_chunks = 0, 0
@@ -118,15 +120,15 @@ def process() -> None:
         url = item["url"]
         path = item["path"]
         if not os.path.exists(path):
-            print(f"[processing] skip missing file: {path}")
+            logger.debug("skip missing file: %s", path)
             continue
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
             html = f.read()
 
-        print(f"[processing] page -> url={url}")
+        logger.debug("page -> url=%s", url)
         title, text = html_to_text(html)
         if not text or len(text) < min_section:
-            print(f"[processing] skip short page: chars={len(text) if text else 0} url={url}")
+            logger.debug("skip short page: chars=%s url=%s", len(text) if text else 0, url)
             continue
 
         chunks = chunk_text(text, max_chunk, overlap)
@@ -142,10 +144,10 @@ def process() -> None:
             count_chunks += 1
 
         count_pages += 1
-        print(f"[processing] page done: url={url} chunks={len(chunks)}")
+        logger.debug("page done: url=%s chunks=%d", url, len(chunks))
 
     out_f.close()
-    print(f"[processing] DONE pages={count_pages} chunks_total={count_chunks} -> {chunks_path}")
+    logger.info("DONE pages=%d chunks_total=%d -> %s", count_pages, count_chunks, chunks_path)
 
 if __name__ == "__main__":
     process()

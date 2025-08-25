@@ -3,7 +3,12 @@
 # Runs: 1) Crawl  2) Process  3) Index  4) Prepare dataset
 # Usage:
 #   ./scripts/setup_initial.sh
+#   ./scripts/setup_initial.sh --debug
 #   ./scripts/setup_initial.sh --help
+#
+# Logging:
+# - Default log level is INFO.
+# - Pass --debug to enable DEBUG logs across Python steps (sets LOG_LEVEL=DEBUG).
 
 set -euo pipefail
 
@@ -12,10 +17,11 @@ cd "$REPO_ROOT"
 
 WITH_DATASET=1
 PYTHON_BIN="${PYTHON:-python}"
+DEBUG=0
 
 print_help() {
   cat <<EOF
-Usage: $(basename "$0")
+Usage: $(basename "$0") [options]
 
 Runs the initial pipeline steps as documented in README:
   1. Crawl docs
@@ -24,7 +30,8 @@ Runs the initial pipeline steps as documented in README:
   4. Prepare dataset JSONL for finetuning
 
 Options:
-  -h, --help       Show this help
+  -d, --debug     Enable DEBUG logging (exports LOG_LEVEL=DEBUG)
+  -h, --help      Show this help
 
 Notes:
 - Ensure your virtual environment is activated before running:
@@ -41,6 +48,10 @@ while [[ $# -gt 0 ]]; do
       print_help
       exit 0
       ;;
+    -d|--debug)
+      DEBUG=1
+      shift
+      ;;
     *)
       echo "Unknown argument: $1"
       echo "Try --help for usage."
@@ -52,6 +63,12 @@ done
 log() {
   echo "[setup_initial] $*"
 }
+
+# Logging level (propagate to Python)
+if [[ "$DEBUG" -eq 1 ]]; then
+  export LOG_LEVEL=DEBUG
+  log "Debug logging enabled (LOG_LEVEL=DEBUG)"
+fi
 
 # Basic environment info
 log "Repository root: $REPO_ROOT"
