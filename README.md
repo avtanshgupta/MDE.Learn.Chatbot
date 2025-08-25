@@ -20,7 +20,6 @@ Public documentation: https://learn.microsoft.com/en-us/defender-endpoint/
 - Inference: adapter-first loading with fallback to merged or base
 - App: Streamlit UI with token streaming and source attributions
 - Auto-updates: scheduled pipeline + HTTP trigger
-- Basic test suite (pytest) and CI workflows
 
 ## Key Concepts and Links
 
@@ -89,101 +88,6 @@ Install dependencies:
 # bash
 pip install -r requirements.txt
 ```
-
-
-## Configuration
-
-Primary settings live in `configs/config.yaml`. Important keys (full example):
-
-```yaml
-# yaml
-project:
-  name: mde_learn_chatbot
-  seed: 42
-
-data:
-  raw_html_dir: data/raw/html
-  processed_dir: data/processed
-  chunks_path: data/processed/chunks.jsonl
-  url_manifest: data/processed/urls.json
-  dataset_dir: data/datasets
-  finetune_train: data/datasets/finetune.train.jsonl
-  finetune_val: data/datasets/finetune.val.jsonl
-
-crawl:
-  base_url: https://learn.microsoft.com/en-us/defender-endpoint/
-  allowed_domain: learn.microsoft.com
-  allowed_path_prefix: /en-us/defender-endpoint
-  user_agent: MDE-Learn-Chatbot/1.0 (+https://github.com/avtanshgupta/MDE.Learn.Chatbot)
-  max_pages: 50000
-  request_timeout_sec: 20
-  sleep_between_requests_sec: 0.2
-  respect_robots_txt: true
-  same_language_only: true
-  include_filetypes: [html]
-  exclude_url_patterns:
-    - "?view="
-
-processing:
-  min_section_chars: 200
-  max_chunk_chars: 1200
-  chunk_overlap_chars: 200
-  keep_headings: true
-
-index:
-  vector_store: chroma
-  chroma_persist_dir: data/index/chroma
-  collection: defender-endpoint
-  embedding_model: sentence-transformers/all-MiniLM-L6-v2
-  embedding_batch: 64
-  top_k: 5
-
-model:
-  base_id: mlx-community/Qwen2.5-7B-Instruct-4bit
-  system_prompt_path: configs/prompts/system.txt
-
-finetune:
-  out_dir: models/adapters/qwen2_5_mde_lora
-  epochs: 1
-  batch_size: 1
-  accumulate_steps: 32
-  lr: 1.0e-5
-  lora:
-    enabled: true
-    r: 16
-    alpha: 32
-    dropout: 0.05
-  val_ratio: 0.05
-  max_train_samples: null
-
-merge:
-  out_dir: models/merges/qwen2_5_mde_merged
-
-infer:
-  max_tokens: 512
-  temperature: 0.2
-  top_p: 0.95
-  use_streaming: true
-  retrieval_top_k: 5
-
-app:
-  host: 0.0.0.0
-  port: 8501
-  mode: rag_ft  # options: rag, ft, rag_ft
-
-update:
-  enabled: true
-  api_host: 127.0.0.1
-  api_port: 8799
-  min_interval_hours: 24
-  last_run_file: data/processed/last_update.json
-```
-
-System prompt: `configs/prompts/system.txt`.
-
-Notes:
-- If fine-tuned adapters or merged weights are found, the app overrides a default `rag` mode to `rag_ft`.
-- Sidebar shows non-interactive knobs sourced from config: retrieval_top_k, max_tokens, temperature.
 
 ## Quickstart
 
@@ -326,15 +230,116 @@ Manual alternative:
 rm -rf data/raw data/processed data/index/chroma data/datasets models/adapters models/merges outputs
 ```
 
-## Tests
+## Configuration
 
-Run the test suite:
-```bash
-# bash
-pytest -q
-```
+Primary settings live in `configs/config.yaml`. The tables below summarize defaults and describe each field.
 
-CI workflows are defined under `.github/workflows/`.
+Project
+| Key  | Default           | Description                                   |
+|------|-------------------|-----------------------------------------------|
+| name | mde_learn_chatbot | Project identifier used in logs/artifacts.    |
+| seed | 42                | Global random seed for reproducibility.       |
+
+Data
+| Key            | Default                              | Description                                         |
+|----------------|--------------------------------------|-----------------------------------------------------|
+| raw_html_dir   | data/raw/html                         | Directory for raw crawled HTML.                     |
+| processed_dir  | data/processed                        | Root directory for processed artifacts.             |
+| chunks_path    | data/processed/chunks.jsonl           | JSONL with chunked text used for indexing/RAG.      |
+| url_manifest   | data/processed/urls.json              | JSON manifest of discovered/crawled URLs.           |
+| dataset_dir    | data/datasets                         | Output directory for generated training datasets.   |
+| finetune_train | data/datasets/finetune.train.jsonl    | JSONL training split path for LoRA finetuning.      |
+| finetune_val   | data/datasets/finetune.val.jsonl      | JSONL validation split path for LoRA finetuning.    |
+
+Crawl
+| Key                        | Default                                                                 | Description                                                                 |
+|----------------------------|-------------------------------------------------------------------------|-----------------------------------------------------------------------------|
+| base_url                   | https://learn.microsoft.com/en-us/defender-endpoint/                    | Starting URL for the crawl.                                                 |
+| allowed_domain             | learn.microsoft.com                                                     | Domain constraint for crawler.                                              |
+| allowed_path_prefix        | /en-us/defender-endpoint                                                | Path prefix constraint for crawler.                                         |
+| user_agent                 | MDE-Learn-Chatbot/1.0 (+https://github.com/avtanshgupta/MDE.Learn.Chatbot) | User-Agent string used by the crawler.                                      |
+| max_pages                  | 50000                                                                   | Maximum number of pages to crawl.                                           |
+| request_timeout_sec        | 20                                                                      | Per-request timeout in seconds.                                             |
+| sleep_between_requests_sec | 0.2                                                                     | Delay between HTTP requests in seconds.                                     |
+| respect_robots_txt         | true                                                                    | Obey robots.txt directives when crawling.                                   |
+| same_language_only         | true                                                                    | Restrict to the same language as the start URL.                             |
+| include_filetypes          | [html]                                                                  | Allowed file extensions to fetch.                                           |
+| exclude_url_patterns       | ["?view="]                                                              | Substrings/patterns to skip when enqueueing URLs.                           |
+
+Processing
+| Key                 | Default | Description                                                                       |
+|---------------------|---------|-----------------------------------------------------------------------------------|
+| min_section_chars   | 200     | Minimum section length before chunking.                                           |
+| max_chunk_chars     | 1200    | Target maximum characters per chunk.                                              |
+| chunk_overlap_chars | 200     | Character overlap between consecutive chunks.                                     |
+| keep_headings       | true    | Preserve headings in chunk output to aid attribution.                             |
+
+Index
+| Key                | Default                                  | Description                                              |
+|--------------------|------------------------------------------|----------------------------------------------------------|
+| vector_store       | chroma                                   | Vector DB backend.                                       |
+| chroma_persist_dir | data/index/chroma                        | Directory for Chroma persistent storage.                 |
+| collection         | defender-endpoint                         | Chroma collection name.                                  |
+| embedding_model    | sentence-transformers/all-MiniLM-L6-v2    | Sentence-Transformers model for embeddings.              |
+| embedding_batch    | 64                                       | Batch size for embedding computation.                    |
+| top_k              | 5                                        | Default top-k for retrieval queries.                     |
+
+Model
+| Key                | Default                               | Description                                        |
+|--------------------|---------------------------------------|----------------------------------------------------|
+| base_id            | mlx-community/Qwen2.5-7B-Instruct-4bit | MLX-compatible base model identifier (HF).         |
+| system_prompt_path | configs/prompts/system.txt            | Path to system prompt used during inference.       |
+
+Finetune
+| Key           | Default                            | Description                                  |
+|---------------|------------------------------------|----------------------------------------------|
+| out_dir       | models/adapters/qwen2_5_mde_lora   | Output directory for LoRA adapters.          |
+| epochs        | 1                                  | Number of training epochs.                   |
+| batch_size    | 1                                  | Micro-batch size per step.                   |
+| accumulate_steps | 32                              | Gradient accumulation steps.                  |
+| lr            | 1.0e-5                             | Learning rate.                               |
+| lora.enabled  | true                               | Enable LoRA adapters.                        |
+| lora.r        | 16                                 | LoRA rank.                                   |
+| lora.alpha    | 32                                 | LoRA alpha scaling factor.                   |
+| lora.dropout  | 0.05                               | LoRA dropout probability.                    |
+| val_ratio     | 0.05                               | Fraction of data reserved for validation.    |
+| max_train_samples | null                           | Limit training samples (null = use all).     |
+
+Merge
+| Key    | Default                          | Description                               |
+|--------|----------------------------------|-------------------------------------------|
+| out_dir| models/merges/qwen2_5_mde_merged | Output directory for merged full weights. |
+
+Infer
+| Key             | Default | Description                                      |
+|-----------------|---------|--------------------------------------------------|
+| max_tokens      | 512     | Maximum new tokens to generate.                  |
+| temperature     | 0.2     | Sampling temperature.                            |
+| top_p           | 0.95    | Nucleus sampling probability mass.               |
+| use_streaming   | true    | Stream tokens to the UI as they are generated.   |
+| retrieval_top_k | 5       | Top-k documents to retrieve for RAG.             |
+
+App
+| Key  | Default | Description                        |
+|------|---------|------------------------------------|
+| host | 0.0.0.0 | Streamlit server host.             |
+| port | 8501    | Streamlit server port.             |
+| mode | rag_ft  | Run mode: rag, ft, or rag_ft.      |
+
+Update
+| Key                | Default                           | Description                                                  |
+|--------------------|-----------------------------------|--------------------------------------------------------------|
+| enabled            | true                              | Enable background updater service.                           |
+| api_host           | 127.0.0.1                         | HTTP host for update endpoint.                               |
+| api_port           | 8799                              | HTTP port for update endpoint.                               |
+| min_interval_hours | 24                                | Minimum hours between allowed update runs.                   |
+| last_run_file      | data/processed/last_update.json   | File storing last update timestamp/metadata.                 |
+
+System prompt: `configs/prompts/system.txt`.
+
+Notes:
+- If fine-tuned adapters or merged weights are found, the app overrides a default `rag` mode to `rag_ft`.
+- Sidebar shows non-interactive knobs sourced from config: retrieval_top_k, max_tokens, temperature.
 
 ## Notes and trade-offs
 
