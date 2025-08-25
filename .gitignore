@@ -205,3 +205,24 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Project artifacts (generated locally; do not commit)
+data/raw/
+data/processed/
+data/index/
+data/index/chroma/
+data/datasets/
+models/
+models/adapters/
+models/merges/
+models/base/
+outputs/
+
+# OS/editor/system
+.DS_Store
+*.log
+
+# ML artifacts
+*.pt
+*.bin
+*.safetensors

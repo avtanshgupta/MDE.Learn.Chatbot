@@ -1,0 +1,26 @@
+# Core
+pyyaml
+python-dotenv
+tqdm
+tenacity
+pydantic>=2
+requests
+httpx[http2]
+beautifulsoup4
+lxml
+readability-lxml
+
+# Vector store + embeddings (RAG)
+chromadb
+sentence-transformers
+transformers>=4.44.0
+torch
+numpy
+
+# MLX + Qwen loading / finetuning
+mlx
+mlx-lm
+huggingface_hub
+
+# App
+streamlit
