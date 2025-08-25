@@ -4,33 +4,6 @@ End-to-end local RAG + LoRA fine-tuning pipeline for Microsoft Defender for Endp
 
 Public documentation: https://learn.microsoft.com/en-us/defender-endpoint/
 
-## Table of Contents
-- [Features](#features)
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [Quickstart](#quickstart)
-- [Pipeline & CLI Reference](#pipeline--cli-reference)
-- [CLI Help](#cli-help)
-- [Run Modes](#run-modes)
-- [Programmatic Inference (Python)](#programmatic-inference-python)
-- [Customize Streamlit Server](#customize-streamlit-server)
-- [Common Workflows](#common-workflows)
-- [Background Updates and HTTP /update](#background-updates-and-http-update)
-- [Logging](#logging)
-- [Clean / Reset](#clean--reset)
-- [Configuration](#configuration)
-- [Artifacts & Paths](#artifacts--paths)
-- [Data Formats](#data-formats)
-- [Configuration Tips](#configuration-tips)
-- [Environment variables](#environment-variables)
-- [Customize Crawl Target](#customize-crawl-target)
-- [Repository Structure](#repository-structure)
-- [Known Limitations](#known-limitations)
-- [Troubleshooting](#troubleshooting)
-- [Performance Tips](#performance-tips)
-- [FAQ](#faq)
-- [Key Concepts, Links, and Acknowledgments](#key-concepts-links-and-acknowledgments)
-
 ## Features
 
 - Crawler: robots-aware and constrained to `learn.microsoft.com/en-us/defender-endpoint`
@@ -83,7 +56,7 @@ chmod +x scripts/setup_initial.sh scripts/finetune_and_merge.sh
 python -m streamlit run src/app/app.py
 ```
 
-Python-only CLI alternative:
+Python CLI:
 ```bash
 python -m src.main crawl
 python -m src.main process
@@ -94,7 +67,7 @@ python -m src.main merge    # optional
 python -m src.main app      # starts Streamlit
 ```
 
-App URL (default): http://localhost:8501  
+App URL (default): `http://localhost:8501`  
 Modes: `rag`, `ft`, `rag_ft`.
 
 ## Pipeline & CLI Reference
@@ -116,18 +89,6 @@ End-to-end sequence:
   Command: `python -m src.main merge`
 - App — Start Streamlit app  
   Command: `python -m src.main app`
-
-Examples:
-```bash
-python -m src.main --debug crawl
-python -m src.main index
-python -m src.main app
-```
-
-Debug logging:
-```bash
-LOG_LEVEL=DEBUG python -m streamlit run src/app/app.py
-```
 
 ### CLI Help
 ```bash
@@ -161,12 +122,6 @@ for s in sources or []:
     print(f"[{s.get('rank')}] {s.get('title')} -> {s.get('url')} (distance={s.get('distance')})")
 ```
 
-### Sample Queries
-
-- How do I onboard macOS devices to MDE?
-- What are prerequisites for endpoint detection on macOS?
-- How do I configure tamper protection?
-- Which network URLs must be allowed for MDE service connectivity?
 
 ### Customize Streamlit Server
 
@@ -284,7 +239,6 @@ See Artifacts & Paths for where outputs are written. System prompt file: `config
 - models/merges/... — merged full weights (merge.out_dir)
 - outputs/ — optional logs when piping command output
 
-Use Clean / Reset above to start fresh.
 
 ## Data Formats
 
@@ -303,7 +257,7 @@ Use Clean / Reset above to start fresh.
 - Streamlit port/host: `app.host` (default 0.0.0.0), `app.port` (default 8501).
 - Update API: `update.api_host` (default 127.0.0.1), `update.api_port` (default 8799).
 
-### Environment variables
+### Environment Variables
 
 - LOG_LEVEL — controls logging verbosity (INFO by default). Examples:
   ```bash
@@ -398,7 +352,7 @@ python -m src.main index
 - Use Python 3.10+ and create a virtualenv.
 - Before opening a PR, run tests and linters:
   - Lint: `ruff check .`
-- Keep README and config tables in sync with code changes.
+- Keep README and config summary in sync with code changes.
 
 ## Key Concepts, Links, and Acknowledgments
 
