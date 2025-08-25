@@ -1,4 +1,4 @@
-# MDE.Learn.Chatbot
+# MDE Learn Chatbot
 
 End-to-end local RAG + LoRA fine-tuning pipeline for Microsoft Defender for Endpoint (MDE) docs on Apple Silicon. It crawls the official docs, builds a vector index, fine-tunes Qwen2.5 with MLX + LoRA, and serves a Streamlit chatbot with modes: rag | ft | rag_ft.
 
@@ -34,7 +34,7 @@ pip install -r requirements.txt
 
 ## Quickstart
 
-One-time setup with finetune+merge, then launch the app:
+One-time setup with finetune + merge, then launch the app:
 ```bash
 chmod +x scripts/setup_initial.sh scripts/finetune.sh
 ./scripts/setup_initial.sh
@@ -83,19 +83,19 @@ python -m src.main -h
 python -m src.main crawl -h
 ```
 
-### Run Modes
+## Run Modes
 
 - rag — Retrieve top-k docs, prompt base model
 - ft — Use fine-tuned model only (no retrieval)
 - rag_ft — Retrieve top-k docs and use fine-tuned model
 
-### Adapter Loading Order
+## Adapter Loading Order
 
 1) Load LoRA adapter from `finetune.out_dir` if present  
 2) Else use merged weights from `merge.out_dir`  
 3) Else fall back to `model.base_id`
 
-### Programmatic Inference
+## Programmatic Inference
 
 ```python
 from src.inference.generate import ModelRunner
@@ -111,7 +111,7 @@ for s in sources or []:
 
 ## Configuration
 
-All settings: `configs/config.yaml`. Key sections:
+Primary config: `configs/config.yaml`. Key sections:
 - project — name, seed
 - data — raw/processed dirs, chunk and dataset paths
 - crawl — base_url, domain/path constraints, pacing, robots
@@ -129,7 +129,7 @@ System prompt file: `configs/prompts/system.txt`.
 ## Artifacts & Paths
 
 - data/raw/html — crawled pages
-- data/processed — chunks.jsonl, urls.json, last_update.json
+- data/processed — `chunks.jsonl`, `urls.json`, `last_update.json`
 - data/index/chroma — Chroma index
 - data/datasets — training datasets
 - models/adapters/... — LoRA adapter weights (`finetune.out_dir`)
