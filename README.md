@@ -1,75 +1,102 @@
 # MDE.Learn.Chatbot
 
-End-to-end local project that:
-- Crawls and extracts all documentation under https://learn.microsoft.com/en-us/defender-endpoint/
-- Processes and chunks content, builds a vector index (Chroma + Sentence-Transformers)
-- Fine-tunes Qwen2.5-7B-Instruct-4bit locally on Apple Silicon using MLX + LoRA
-- Serves a Streamlit chatbot with RAG for freshness (retrieval) and FT for domain tone
+Local end-to-end RAG + LoRA fine-tuning pipeline for Microsoft Defender for Endpoint (MDE) docs:
+- Crawls and cleans MDE docs
+- Chunks and builds a vector index (Chroma + Sentence-Transformers)
+- Fine-tunes Qwen2.5-7B-Instruct-4bit on Apple Silicon with MLX + LoRA
+- Serves a Streamlit chatbot with modes: rag | ft | rag_ft
+- Optional background update service with HTTP `/update`
 
-Tested on macOS Apple Silicon. The base model is downloaded locally; fine-tuning and inference run locally using MLX.
+Runs fully on macOS Apple Silicon. Base model downloads locally on first use.
 
-## Project Structure
+Public documentation: https://learn.microsoft.com/en-us/defender-endpoint/
+
+## Features
+
+- Crawler: robots-aware, domain/path constrained to MDE docs
+- Processing: HTML → clean text → chunking
+- Indexing: persistent Chroma store with MiniLM embeddings
+- Training: MLX LoRA finetuning + optional merge to standalone weights
+- Inference: adapter-first loading with fallback to merged or base
+- App: Streamlit UI with token streaming and source attributions
+- Auto-updates: scheduled pipeline + HTTP trigger
+
+## Key Concepts and Links
+
+- MLX: Apple’s array framework optimized for Apple Silicon. [Docs](https://ml-explore.github.io/mlx/) • [GitHub](https://github.com/ml-explore/mlx)
+- mlx-lm: Utilities for running/fine-tuning LLMs with MLX. [Repo](https://github.com/ml-explore/mlx-examples/tree/main/llms) • [PyPI](https://pypi.org/project/mlx-lm/)
+- LoRA: Low-Rank Adaptation for efficient fine-tuning of large models. [Paper](https://arxiv.org/abs/2106.09685)
+- RAG: Retrieval-Augmented Generation to ground answers in external knowledge. [Paper](https://arxiv.org/abs/2005.11401)
+- Chroma: Open-source vector database used for indexing and retrieval. [Docs](https://docs.trychroma.com/)
+- Sentence-Transformers: Embedding models for semantic search. [Website](https://www.sbert.net/) • [GitHub](https://github.com/UKPLab/sentence-transformers)
+- Qwen2.5-7B-Instruct: Instruction-tuned base model. [Hugging Face](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct)
+- Qwen2.5-7B-Instruct-4bit (MLX): Quantized variant used locally. [Hugging Face](https://huggingface.co/mlx-community/Qwen2.5-7B-Instruct-4bit)
+- Streamlit: App framework for data/ML apps. [Website](https://streamlit.io/) • [Docs](https://docs.streamlit.io/)
+
+## Repository Structure
 
 ```text
 configs/
-  config.yaml                  # Central config
+  config.yaml
   prompts/
-    system.txt                 # System prompt used by inference/app
-data/
-  raw/html/                    # Crawled HTML (ignored by git)
-  processed/                   # Extracted chunks and manifests (ignored)
-  datasets/                    # Fine-tune datasets (ignored)
-  index/chroma/                # Chroma DB persistence (ignored)
-models/
-  adapters/                    # LoRA adapter output (ignored)
-  merges/                      # (Optional) merged model weights (ignored)
-  base/                        # (Optional) local base copy (ignored)
-outputs/                       # Any additional outputs/logs (ignored)
+    system.txt
+data/                       # generated; gitignored
+models/                     # adapters/merges; gitignored
+outputs/                    # optional logs; gitignored
+scripts/
+  setup_initial.sh          # crawl → process → index → prepare dataset
+  finetune_and_merge.sh     # finetune → merge
 src/
-  app/app.py                   # Streamlit UI
-  crawler/crawler.py           # Crawler (robots-aware)
-  processing/process.py        # HTML -> clean text, chunking
-  indexing/build_index.py      # Build Chroma index with embeddings
-  inference/retriever.py       # Query index, format context
-  inference/generate.py        # Load model (base/adapter/merged) and generate
-  training/prepare_dataset.py  # Create JSONL {"text": "..."} datasets
-  training/finetune_mlx.py     # Run MLX LoRA finetune and optional merge
-  utils/config.py              # Config helpers
+  app/app.py                # Streamlit UI
+  app/updater.py            # background updater + HTTP /update
+  crawler/crawler.py        # crawler
+  processing/process.py     # cleaning + chunking
+  indexing/build_index.py   # build Chroma index
+  inference/retriever.py    # retrieve context
+  inference/generate.py     # load model and generate
+  training/prepare_dataset.py
+  training/finetune_mlx.py
+  utils/config.py
+  main.py                   # unified CLI entrypoint
 requirements.txt
 ```
 
-## Setup
+## Requirements
 
-1) Prerequisites
+- macOS on Apple Silicon (M-series)  
 - Python 3.10+
-- macOS on Apple Silicon (M-series; MLX uses Apple GPUs/NPUs)
-- Sufficient disk space (model + index + datasets)
-- Xcode Command Line Tools may help with wheels
+- Disk space for model, index, datasets
+- Xcode Command Line Tools recommended for wheels
 
-2) Create environment and install dependencies
+## Installation
 
-Create and activate venv:
+Create and activate a virtual environment:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 ```
 
-Upgrade basics:
+Upgrade packaging tools:
 ```bash
 pip install -U pip setuptools wheel
 ```
 
-Install project deps:
+Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
 ## Configuration
 
-All knobs live in `configs/config.yaml`. Key sections:
+Primary settings live in `configs/config.yaml`. Important keys:
 
 ```yaml
-# configs/config.yaml (excerpt)
+project:
+  name: mde_learn_chatbot
+data:
+  raw_html_dir: data/raw/html
+  processed_dir: data/processed
+  dataset_dir: data/datasets
 crawl:
   base_url: https://learn.microsoft.com/en-us/defender-endpoint/
   max_pages: 5000
@@ -80,154 +107,102 @@ index:
   embedding_model: sentence-transformers/all-MiniLM-L6-v2
 model:
   base_id: mlx-community/Qwen2.5-7B-Instruct-4bit
+  system_prompt_path: configs/prompts/system.txt
 finetune:
   out_dir: models/adapters/qwen2_5_mde_lora
+merge:
+  out_dir: models/merges/qwen2_5_mde_merged
 infer:
   max_tokens: 512
 app:
-  mode: rag_ft  # rag | ft | rag_ft
-```
-
-System prompt is in `configs/prompts/system.txt`.
-
-## Pipeline: Crawl → Process → Index → Dataset → Finetune
-
-Run these from the repo root with your venv activated.
-
-1) Crawl docs (respects robots.txt, filters to defender-endpoint path)
-```bash
-python -m src.crawler.crawler
-```
-
-2) Process HTML to clean text and chunks
-```bash
-python -m src.processing.process
-```
-
-3) Build vector index (Chroma + Sentence-Transformers)
-```bash
-python -m src.indexing.build_index
-```
-
-4) Prepare fine-tune datasets (JSONL {"text": ...})
-```bash
-python -m src.training.prepare_dataset
-```
-
-5) Fine-tune Qwen2.5-7B-Instruct-4bit locally with MLX LoRA
-```bash
-python -m src.training.finetune_mlx
-```
-
-6) (Optional) Merge LoRA into standalone weights
-```bash
-python -m src.training.finetune_mlx --merge-only
-```
-
-Notes:
-- The first finetune/inference call will download the base model locally (Hugging Face).
-- LoRA adapters are saved to `models/adapters/...`. Merge outputs to `models/merges/...`.
-
-## Streamlit Chatbot
-
-Start the app:
-```bash
-python -m streamlit run src/app/app.py
-```
-
-Sidebar “Mode”:
-- rag: Only retrieval-augmented generation over the Chroma index
-- ft: Only the fine-tuned model (no retrieval)
-- rag_ft: Use RAG to ground the FT’d model with the latest indexed content
-
-The app streams tokens and shows sources (URLs with chunk ranks) for transparency.
-
-## Daily Updates and /update API
-
-Background update services start automatically when the Streamlit app launches (if `update.enabled: true` in `configs/config.yaml`). Two services run:
-- HTTP server: listens on `api_host:api_port` and accepts `POST /update`
-- Scheduler: checks once in a while and triggers the update when the minimum interval has elapsed
-
-What runs during an update (in a background daemon thread):
-1. Crawl → 2. Process → 3. Index → 4. Prepare dataset → 5. Finetune (LoRA, MLX)
-
-Rate limiting:
-- Controlled by `update.min_interval_hours` and `update.last_run_file`
-- If an update is already running or not yet allowed, HTTP returns 429 and the sidebar shows remaining minutes
-- Successful acceptance returns 202 and logs progress lines prefixed with `[app.updater]`
-
-Manual triggers:
-```bash
-curl -X POST http://127.0.0.1:8799/update
-```
-
-Configuration keys (excerpt):
-```yaml
+  mode: rag_ft    # rag | ft | rag_ft
 update:
   enabled: true
   api_host: 127.0.0.1
   api_port: 8799
   min_interval_hours: 24
-  last_run_file: data/processed/last_update.json
 ```
+
+System prompt: `configs/prompts/system.txt`.
+
+## Quickstart
+
+Run from the repo root with your virtual environment active.
+
+Setup → Train → Run (using scripts):
+```bash
+chmod +x scripts/setup_initial.sh scripts/finetune_and_merge.sh
+./scripts/setup_initial.sh
+./scripts/finetune_and_merge.sh
+python -m streamlit run src/app/app.py
+```
+
+Python-only alternative:
+
+Setup:
+```bash
+python -m src.main crawl
+python -m src.main process
+python -m src.main index
+```
+
+Training:
+```bash
+python -m src.main prepare-dataset
+python -m src.main finetune
+```
+
+Optional:
+```bash
+python -m src.main merge
+```
+
+Run:
+```bash
+python -m streamlit run src/app/app.py
+```
+
+App URL: http://localhost:8501. Modes: rag, ft, rag_ft.
+
+
 
 Notes:
-- The HTTP endpoint is available only while the Streamlit app is running.
-- To disable the services, set `update.enabled: false`.
-- To force an earlier re-run, lower `min_interval_hours` or delete the file at `last_run_file`.
+- First finetune/inference will download the base model locally (Hugging Face).
+- Adapters saved to `models/adapters/...`; merged weights to `models/merges/...`.
 
-## Adapter Loading Behavior (Inference)
+### Adapter Loading Order (Inference)
 
-In `ft` or `rag_ft` mode, the app prioritizes:
-1. Load LoRA adapter from `finetune.out_dir` if it exists and is non-empty
-2. Else, use merged weights from `merge.out_dir` if available
-3. Else, fall back to the base model ID
+1) Load LoRA adapter from `finetune.out_dir` if present  
+2) Else use merged weights from `merge.out_dir`  
+3) Else fall back to `model.base_id`
 
-## RAG + Fine-tune Design
+## Background Updates and HTTP /update
 
-- RAG
-  - Embeddings: `sentence-transformers/all-MiniLM-L6-v2`
-  - Vector store: Chroma persistent collection at `data/index/chroma`
-  - Top-k passages injected into the prompt. Sources displayed back to user.
-- Fine-tune (LoRA, MLX)
-  - Task: continual pretraining on domain chunks as plain text
-  - Format: JSONL with {"text": "..."} created from processed chunks
-  - Adapter loaded at inference time, or merged weights used if desired
+If `update.enabled: true`, the app starts:
+- an HTTP server at `update.api_host:update.api_port` (accepts `POST /update`)
+- a scheduler that enforces `min_interval_hours` using `last_run_file`
 
-This pairing gives:
-- Freshness via retrieval from the latest crawl/index
-- Domain fluency via LoRA adapter
+On update, the pipeline runs: Crawl → Process → Index → Prepare dataset → Finetune.
 
-## Scripts (shortcuts)
-
-Initial steps (Crawl → Process → Index → Prepare dataset):
+Manual trigger while the app is running:
 ```bash
-chmod +x scripts/setup_initial.sh
-./scripts/setup_initial.sh
+curl -X POST http://127.0.0.1:8799/update
 ```
 
-Fine-tune and merge LoRA:
-```bash
-chmod +x scripts/finetune_and_merge.sh
-./scripts/finetune_and_merge.sh
-```
+- If an update is too soon or already running, server returns 429.
+- Accepted requests return 202 and log progress lines prefixed with `[app.updater]`.
+
 
 ## Troubleshooting
 
-- Chroma not found / empty index
-  - Ensure steps 1–3 completed successfully; index lives at `data/index/chroma`.
-- Model load errors
-  - Ensure `mlx` and `mlx-lm` installed; on first run the base model downloads locally.
-- Torch install on macOS
-  - CPU-only embeddings are fine. If wheels fail, try upgrading pip and retry.
+- Missing/empty index: ensure steps crawl → process → index completed; index at `data/index/chroma`.
+- Model load issues: confirm `mlx` and `mlx-lm` installed; allow base model download on first run.
+- Torch wheels on macOS: CPU-only embeddings are fine; upgrade pip and retry if needed.
 
-## Clean/Reset Artifacts
+## Clean / Reset
 
-Warning: This removes local artifacts (rebuild as needed).
+Warning: removes generated artifacts.
+
 ```bash
 rm -rf data/raw data/processed data/index/chroma data/datasets models/adapters models/merges outputs
 ```
-
-## License and Content
-
-- Microsoft Defender for Endpoint documentation is owned by Microsoft. Use this project for personal/educational purposes and respect the site’s terms and robots.txt. The repository contains only code to crawl/process/index content locally; no proprietary content is committed.
