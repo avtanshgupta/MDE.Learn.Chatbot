@@ -35,8 +35,7 @@ repos:
     rev: v3.12.0-2
     hooks:
       - id: shfmt
-        # optional config:
-        # args: ["-i", "2", "-s", "-w"]
+        args: ["-i", "2", "-ci", "-s", "-w"]
 
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.11.0.1

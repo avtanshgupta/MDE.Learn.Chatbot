@@ -19,7 +19,7 @@ PYTHON_BIN="${PYTHON:-python}"
 DEBUG=0
 
 print_help() {
-	cat <<EOF
+  cat <<EOF
 Usage: $(basename "$0") [options]
 
 Runs the initial pipeline steps as documented in README:
@@ -42,41 +42,41 @@ EOF
 }
 
 while [[ $# -gt 0 ]]; do
-	case "$1" in
-	-h | --help)
-		print_help
-		exit 0
-		;;
-	-d | --debug)
-		DEBUG=1
-		shift
-		;;
-	*)
-		echo "Unknown argument: $1"
-		echo "Try --help for usage."
-		exit 1
-		;;
-	esac
+  case "$1" in
+    -h | --help)
+      print_help
+      exit 0
+      ;;
+    -d | --debug)
+      DEBUG=1
+      shift
+      ;;
+    *)
+      echo "Unknown argument: $1"
+      echo "Try --help for usage."
+      exit 1
+      ;;
+  esac
 done
 
 log() {
-	echo "[setup_initial] $*"
+  echo "[setup_initial] $*"
 }
 
 # Logging level (propagate to Python)
 if [[ $DEBUG -eq 1 ]]; then
-	export LOG_LEVEL=DEBUG
-	log "Debug logging enabled (LOG_LEVEL=DEBUG)"
+  export LOG_LEVEL=DEBUG
+  log "Debug logging enabled (LOG_LEVEL=DEBUG)"
 fi
 
 # Basic environment info
 log "Repository root: $REPO_ROOT"
 log "Python: $("$PYTHON_BIN" --version 2>&1 | tr -d '\n')"
 if [[ -z ${VIRTUAL_ENV:-} ]]; then
-	log "WARNING: No active virtual environment detected (VIRTUAL_ENV is empty)."
-	log "Proceeding anyway. It's recommended to 'source .venv/bin/activate' first."
+  log "WARNING: No active virtual environment detected (VIRTUAL_ENV is empty)."
+  log "Proceeding anyway. It's recommended to 'source .venv/bin/activate' first."
 else
-	log "Using virtual environment at: $VIRTUAL_ENV"
+  log "Using virtual environment at: $VIRTUAL_ENV"
 fi
 
 # Step 1: Crawl

@@ -27,7 +27,7 @@ DRY_RUN=0
 DEBUG=0
 
 print_help() {
-	cat <<'EOF'
+  cat <<'EOF'
 Clean / Reset generated artifacts.
 
 Options:
@@ -48,88 +48,88 @@ EOF
 }
 
 while [[ $# -gt 0 ]]; do
-	case "$1" in
-	-y | --yes)
-		YES=1
-		shift
-		;;
-	-n | --dry-run)
-		DRY_RUN=1
-		shift
-		;;
-	-d | --debug)
-		DEBUG=1
-		shift
-		;;
-	-h | --help)
-		print_help
-		exit 0
-		;;
-	*)
-		echo "Unknown argument: $1"
-		echo "Try --help for usage."
-		exit 1
-		;;
-	esac
+  case "$1" in
+    -y | --yes)
+      YES=1
+      shift
+      ;;
+    -n | --dry-run)
+      DRY_RUN=1
+      shift
+      ;;
+    -d | --debug)
+      DEBUG=1
+      shift
+      ;;
+    -h | --help)
+      print_help
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1"
+      echo "Try --help for usage."
+      exit 1
+      ;;
+  esac
 done
 
 if [[ $DEBUG -eq 1 ]]; then
-	set -x
+  set -x
 fi
 
 log() { echo "[clean_reset] $*"; }
 
 TARGETS=(
-	"data/raw"
-	"data/processed"
-	"data/index/chroma"
-	"data/datasets"
-	"models/adapters"
-	"models/merges"
-	"outputs"
+  "data/raw"
+  "data/processed"
+  "data/index/chroma"
+  "data/datasets"
+  "models/adapters"
+  "models/merges"
+  "outputs"
 )
 
 log "Repository root: $REPO_ROOT"
 log "Targets to remove:"
 for t in "${TARGETS[@]}"; do
-	echo "  - $t"
+  echo "  - $t"
 done
 
 if [[ $DRY_RUN -eq 1 ]]; then
-	log "Dry run enabled. No changes will be made."
+  log "Dry run enabled. No changes will be made."
 fi
 
 if [[ $YES -ne 1 ]]; then
-	echo
-	read -r -p "Type 'yes' to confirm deletion: " REPLY
-	if [[ $REPLY != "yes" ]]; then
-		log "Aborted."
-		exit 0
-	fi
+  echo
+  read -r -p "Type 'yes' to confirm deletion: " REPLY
+  if [[ $REPLY != "yes" ]]; then
+    log "Aborted."
+    exit 0
+  fi
 fi
 
 EXIT_CODE=0
 for t in "${TARGETS[@]}"; do
-	if [[ $DRY_RUN -eq 1 ]]; then
-		log "Would remove: $t"
-	else
-		if [[ -e $t ]]; then
-			log "Removing: $t"
-			rm -rf "$t" || EXIT_CODE=$?
-		else
-			log "Skip (not found): $t"
-		fi
-	fi
+  if [[ $DRY_RUN -eq 1 ]]; then
+    log "Would remove: $t"
+  else
+    if [[ -e $t ]]; then
+      log "Removing: $t"
+      rm -rf "$t" || EXIT_CODE=$?
+    else
+      log "Skip (not found): $t"
+    fi
+  fi
 done
 
 if [[ $DRY_RUN -eq 1 ]]; then
-	log "Dry run complete."
+  log "Dry run complete."
 else
-	if [[ $EXIT_CODE -eq 0 ]]; then
-		log "Cleanup complete."
-	else
-		log "Cleanup finished with errors (exit=$EXIT_CODE)."
-	fi
+  if [[ $EXIT_CODE -eq 0 ]]; then
+    log "Cleanup complete."
+  else
+    log "Cleanup finished with errors (exit=$EXIT_CODE)."
+  fi
 fi
 
 exit "$EXIT_CODE"
