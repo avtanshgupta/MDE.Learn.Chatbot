@@ -149,6 +149,49 @@ Sidebar “Mode”:
 
 The app streams tokens and shows sources (URLs with chunk ranks) for transparency.
 
+## Daily Updates and /update API
+
+Background update services start automatically when the Streamlit app launches (if `update.enabled: true` in `configs/config.yaml`). Two services run:
+- HTTP server: listens on `api_host:api_port` and accepts `POST /update`
+- Scheduler: checks once in a while and triggers the update when the minimum interval has elapsed
+
+What runs during an update (in a background daemon thread):
+1. Crawl → 2. Process → 3. Index → 4. Prepare dataset → 5. Finetune (LoRA, MLX)
+
+Rate limiting:
+- Controlled by `update.min_interval_hours` and `update.last_run_file`
+- If an update is already running or not yet allowed, HTTP returns 429 and the sidebar shows remaining minutes
+- Successful acceptance returns 202 and logs progress lines prefixed with `[app.updater]`
+
+Manual triggers:
+- In the app sidebar, click “Run update now” (respects the daily limit)
+- From another terminal while the app is running:
+```bash
+curl -X POST http://127.0.0.1:8799/update
+```
+
+Configuration keys (excerpt):
+```yaml
+update:
+  enabled: true
+  api_host: 127.0.0.1
+  api_port: 8799
+  min_interval_hours: 24
+  last_run_file: data/processed/last_update.json
+```
+
+Notes:
+- The HTTP endpoint is available only while the Streamlit app is running.
+- To disable the services, set `update.enabled: false`.
+- To force an earlier re-run, lower `min_interval_hours` or delete the file at `last_run_file`.
+
+## Adapter Loading Behavior (Inference)
+
+In `ft` or `rag_ft` mode, the app prioritizes:
+1. Load LoRA adapter from `finetune.out_dir` if it exists and is non-empty
+2. Else, use merged weights from `merge.out_dir` if available
+3. Else, fall back to the base model ID
+
 ## RAG + Fine-tune Design
 
 - RAG

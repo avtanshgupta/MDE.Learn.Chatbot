@@ -93,8 +93,27 @@ class ModelRunner:
 
         # For rag only, use base model (no adapter)
         print(f"[inference.generate] Loading model: {model_path_or_id} (adapter={adapter})")
-        model, tokenizer = mlx_load(model_path_or_id, adapter=adapter, lazy=True)
-        print("[inference.generate] Model and tokenizer loaded")
+        try:
+            if adapter:
+                try:
+                    model, tokenizer = mlx_load(model_path_or_id, adapter=adapter, lazy=True)
+                    print("[inference.generate] Model and tokenizer loaded with adapter")
+                except TypeError:
+                    print("[inference.generate] 'adapter' kw not supported in this mlx_lm version; attempting fallback")
+                    # Prefer merged weights if available
+                    if os.path.isdir(self.merged_dir) and os.listdir(self.merged_dir):
+                        model_path_or_id = self.merged_dir
+                        print(f"[inference.generate] Falling back to merged weights at {model_path_or_id}")
+                    else:
+                        print("[inference.generate] Merged weights unavailable; falling back to base model")
+                    model, tokenizer = mlx_load(model_path_or_id, lazy=True)
+                    print("[inference.generate] Model and tokenizer loaded without adapter")
+            else:
+                model, tokenizer = mlx_load(model_path_or_id, lazy=True)
+                print("[inference.generate] Model and tokenizer loaded")
+        except Exception as e:
+            print(f"[inference.generate] Model load failed: {e}")
+            raise
         return model, tokenizer
 
     def _build_rag_prompt(self, question: str) -> Tuple[str, List[Dict[str, any]]]:

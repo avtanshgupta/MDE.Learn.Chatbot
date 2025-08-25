@@ -43,25 +43,34 @@ def finetune() -> None:
     print(f"  epochs={epochs} batch={batch_size} accumulate={accumulate} lr={lr}")
     print(f"  lora: r={r} alpha={alpha} dropout={dropout}")
 
-    # Uses mlx-lm finetune module with LoRA on JSONL {"text": "..."} format
-    # Trains locally on Apple Silicon (MLX).
+    # Prepare mlx_lm lora dataset directory with expected filenames
+    lora_data_dir = os.path.join(os.path.dirname(train_path), "lora_data")
+    ensure_dir(lora_data_dir)
+    train_link = os.path.join(lora_data_dir, "train.jsonl")
+    valid_link = os.path.join(lora_data_dir, "valid.jsonl")
+    # link or copy train/val into expected names
+    for src, dst in [(train_path, train_link), (val_path, valid_link)]:
+        try:
+            if os.path.islink(dst) or os.path.exists(dst):
+                os.remove(dst)
+            os.symlink(os.path.abspath(src), dst)
+            print(f"[training.finetune_mlx] Symlinked {dst} -> {src}")
+        except Exception as e:
+            import shutil
+            shutil.copyfile(src, dst)
+            print(f"[training.finetune_mlx] Copied {src} -> {dst} (symlink failed: {e})")
+
+    # Uses mlx_lm lora subcommand (LoRA fine-tuning)
+    # Note: Recent mlx-lm versions use 'lora' with --data directory (containing train.jsonl/valid.jsonl)
     cmd = [
-        sys.executable, "-m", "mlx_lm.finetune",
+        sys.executable, "-m", "mlx_lm", "lora",
         "--model", base_id,
-        "--train", train_path,
-        "--val", val_path,
-        "--output", out_dir,
-        "--epochs", epochs,
+        "--train",
+        "--data", lora_data_dir,
+        "--adapter-path", out_dir,
         "--batch-size", batch_size,
-        "--accumulate", accumulate,
-        "--lr", lr,
-        "--lora-r", r,
-        "--lora-alpha", alpha,
-        "--lora-dropout", dropout,
-        "--format", "text",           # our dataset has {"text": "..."}
-        "--dtype", "bfloat16",        # good default for Apple Silicon
-        "--warmup-steps", "50",
-        "--save-every", "0",          # only save at the end
+        "--learning-rate", lr,
+        "--save-every", "1000",
     ]
 
     code = run(cmd)
@@ -85,10 +94,10 @@ def merge() -> None:
 
     # Merge LoRA into a new model folder for standalone inference (optional; for FT-only mode)
     cmd = [
-        sys.executable, "-m", "mlx_lm.merge",
+        sys.executable, "-m", "mlx_lm", "fuse",
         "--model", base_id,
-        "--adapter", adapter_dir,
-        "--out", out_dir
+        "--adapter-path", adapter_dir,
+        "--save-path", out_dir
     ]
     code = run(cmd)
     if code != 0:

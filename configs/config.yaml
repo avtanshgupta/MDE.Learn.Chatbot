@@ -72,3 +72,10 @@ app:
   host: 0.0.0.0
   port: 8501
   mode: rag_ft  # options: rag, ft, rag_ft
+
+update:
+  enabled: true
+  api_host: 127.0.0.1
+  api_port: 8799
+  min_interval_hours: 24
+  last_run_file: data/processed/last_update.json
