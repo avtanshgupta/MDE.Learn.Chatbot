@@ -1,0 +1,67 @@
+name: Linter
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - "**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  python-and-shell-lint:
+    name: Python (ruff) and Shell (shfmt + shellcheck)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install linters
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          sudo curl -sSLo /usr/local/bin/shfmt https://github.com/mvdan/sh/releases/download/v3.7.0/shfmt_v3.7.0_linux_amd64
+          sudo chmod +x /usr/local/bin/shfmt
+          ruff --version
+          shfmt -version
+          shellcheck --version
+
+      - name: Ruff (Python)
+        run: |
+          # Lint all tracked Python files (safe if none)
+          ruff check .
+
+      - name: shfmt (Shell formatting check on tracked files)
+        run: |
+          # Only lint git-tracked shell files; portable across GNU/BSD utils
+          if [ "$(git ls-files -- '*.sh' '*.bash' | wc -l)" -gt 0 ]; then
+            UNFORMATTED=$(git ls-files -z -- '*.sh' '*.bash' | xargs -0 shfmt -l -i 2 -ci -s || true)
+            if [ -n "$UNFORMATTED" ]; then
+              echo "shfmt: the following files need formatting:"
+              echo "$UNFORMATTED"
+              echo "To fix, run: git ls-files -z -- '*.sh' '*.bash' | xargs -0 shfmt -w -i 2 -ci -s"
+              exit 1
+            fi
+          else
+            echo "No tracked shell scripts to lint."
+          fi
+
+      - name: shellcheck (Static analysis on tracked files)
+        run: |
+          if [ "$(git ls-files -- '*.sh' '*.bash' | wc -l)" -gt 0 ]; then
+            git ls-files -z -- '*.sh' '*.bash' | xargs -0 shellcheck -x
+          else
+            echo "No tracked shell scripts to check."
+          fi

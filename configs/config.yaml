@@ -1,0 +1,81 @@
+project:
+  name: mde_learn_chatbot
+  seed: 42
+
+data:
+  raw_html_dir: data/raw/html
+  processed_dir: data/processed
+  chunks_path: data/processed/chunks.jsonl
+  url_manifest: data/processed/urls.json
+  dataset_dir: data/datasets
+  finetune_train: data/datasets/finetune.train.jsonl
+  finetune_val: data/datasets/finetune.val.jsonl
+
+crawl:
+  base_url: https://learn.microsoft.com/en-us/defender-endpoint/
+  allowed_domain: learn.microsoft.com
+  allowed_path_prefix: /en-us/defender-endpoint
+  user_agent: MDE-Learn-Chatbot/1.0 (+https://github.com/avtanshgupta/MDE.Learn.Chatbot)
+  max_pages: 50000
+  request_timeout_sec: 20
+  sleep_between_requests_sec: 0.2
+  respect_robots_txt: true
+  same_language_only: true
+  include_filetypes: [html]
+  exclude_url_patterns:
+    - "?view="
+
+processing:
+  min_section_chars: 200
+  max_chunk_chars: 1200
+  chunk_overlap_chars: 200
+  keep_headings: true
+
+index:
+  vector_store: chroma
+  chroma_persist_dir: data/index/chroma
+  collection: defender-endpoint
+  embedding_model: sentence-transformers/all-MiniLM-L6-v2
+  embedding_batch: 64
+  top_k: 5
+
+model:
+  base_id: mlx-community/Qwen2.5-7B-Instruct-4bit
+  system_prompt_path: configs/prompts/system.txt
+
+finetune:
+  # Uses mlx-lm LoRA finetuning
+  out_dir: models/adapters/qwen2_5_mde_lora
+  epochs: 1
+  batch_size: 1
+  accumulate_steps: 32
+  lr: 1.0e-5
+  lora:
+    enabled: true
+    r: 16
+    alpha: 32
+    dropout: 0.05
+  val_ratio: 0.05
+  max_train_samples: null  # set to an int to cap for quick tests
+
+merge:
+  out_dir: models/merges/qwen2_5_mde_merged
+
+infer:
+  max_tokens: 512
+  temperature: 0.2
+  top_p: 0.95
+  use_streaming: true
+  retrieval_top_k: 5
+
+app:
+  host: 0.0.0.0
+  port: 8501
+  mode: rag_ft  # options: rag, ft, rag_ft
+
+update:
+  enabled: true
+  api_host: 127.0.0.1
+  api_port: 8799
+  min_interval_hours: 24
+  last_run_file: data/processed/last_update.json
