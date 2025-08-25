@@ -61,18 +61,25 @@ python -m src.main app      # starts Streamlit
 App URL (default): http://localhost:8501  
 Modes: `rag`, `ft`, `rag_ft`.
 
-## CLI Reference
+## Pipeline & CLI Reference
 
 Entrypoint: `python -m src.main [--debug] <command>`
 
-Commands:
-- `crawl` — Crawl MDE docs
-- `process` — Convert HTML to clean text chunks
-- `index` — Build Chroma index
-- `prepare-dataset` — Create JSONL dataset for fine-tuning
-- `finetune` — Run MLX LoRA fine-tuning
-- `merge` — Merge LoRA adapters into standalone weights
-- `app` — Start Streamlit app
+End-to-end sequence:
+- Crawl — Crawl MDE docs  
+  Command: `python -m src.main crawl`
+- Process — Convert HTML to clean text chunks  
+  Command: `python -m src.main process`
+- Index — Build Chroma index  
+  Command: `python -m src.main index`
+- Prepare dataset — Create JSONL dataset for fine-tuning  
+  Command: `python -m src.main prepare-dataset`
+- Finetune — Run MLX LoRA fine-tuning  
+  Command: `python -m src.main finetune`
+- Merge (optional) — Merge LoRA adapters into standalone weights  
+  Command: `python -m src.main merge`
+- App — Start Streamlit app  
+  Command: `python -m src.main app`
 
 Examples:
 ```bash
@@ -81,43 +88,9 @@ python -m src.main index
 python -m src.main app
 ```
 
-Debug logging can also be enabled with `LOG_LEVEL=DEBUG`:
+Debug logging:
 ```bash
 LOG_LEVEL=DEBUG python -m streamlit run src/app/app.py
-```
-
-## Pipeline
-
-Crawl → Process → Index → Dataset → Finetune
-
-1) Crawl (fetch raw HTML and URL manifest)
-```bash
-python -m src.crawler.crawler
-```
-
-2) Process (parse HTML, clean text, chunk)
-```bash
-python -m src.processing.process
-```
-
-3) Index (embed chunks, build persistent Chroma index)
-```bash
-python -m src.indexing.build_index
-```
-
-4) Dataset (JSONL text for continual pretraining)
-```bash
-python -m src.training.prepare_dataset
-```
-
-5) Finetune (MLX LoRA; adapters saved under `models/adapters/...`)
-```bash
-python -m src.training.finetune_mlx
-```
-
-Optional: merge LoRA into standalone weights
-```bash
-python -m src.training.finetune_mlx --merge-only
 ```
 
 ### Adapter Loading Order (Inference)
@@ -125,6 +98,7 @@ python -m src.training.finetune_mlx --merge-only
 1) Load LoRA adapter from `finetune.out_dir` if present  
 2) Else use merged weights from `merge.out_dir`  
 3) Else fall back to `model.base_id`
+
 
 ## Background Updates and HTTP /update
 
@@ -318,16 +292,6 @@ src/
   utils/config.py
   main.py                   # unified CLI entrypoint
 requirements.txt
-```
-
-## Development
-
-Run linters locally:
-```bash
-ruff check .
-# Optional: format shell scripts and run shellcheck (if installed)
-shfmt -l -i 2 -ci -s $(git ls-files -- '*.sh' '*.bash')
-shellcheck -x $(git ls-files -- '*.sh' '*.bash')
 ```
 
 ## Troubleshooting
