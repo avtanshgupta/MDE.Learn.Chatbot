@@ -83,6 +83,25 @@ def cmd_app(args: argparse.Namespace) -> None:
         logger.info("Streamlit exited cleanly")
 
 
+def cmd_evaluate(args: argparse.Namespace) -> None:
+    from src.eval.runner import run_evaluation, summarize_run
+
+    variant_list = [v.strip() for v in args.variants.split(",") if v.strip()]
+    # Default to live retrieval unless user explicitly disables it via flags (frozen only).
+    live_flag = bool(args.live_rag) or (not bool(args.frozen_rag))
+    run_dir = run_evaluation(
+        dataset_path=args.dataset,
+        variant_names=variant_list,
+        out_dir=(args.out_dir or None),
+        live_rag=live_flag,
+        frozen_rag=bool(args.frozen_rag),
+        max_items=args.max_items,
+        warmup=args.warmup,
+        seed=args.seed,
+        auto_index=bool(args.auto_index),
+    )
+    summarize_run(run_dir)
+
 def main() -> None:
     logger.info("Parsing CLI arguments")
     logger.debug("argv: %s", " ".join(sys.argv))
@@ -97,6 +116,18 @@ def main() -> None:
     sub.add_parser("finetune", help="Run MLX LoRA finetuning").set_defaults(fn=cmd_finetune)
     sub.add_parser("merge", help="Merge LoRA into standalone weights").set_defaults(fn=cmd_merge)
     sub.add_parser("app", help="Start Streamlit app").set_defaults(fn=cmd_app)
+
+    eval_p = sub.add_parser("evaluate", help="Evaluate model variants on a QA dataset")
+    eval_p.add_argument("--dataset", type=str, required=True, help="Path to eval JSONL with fields: question, answer, gold_urls?")
+    eval_p.add_argument("--variants", type=str, default="base_rag,rag_ft", help="Comma-separated from: base_ft,base_rag,ft_only,rag_ft")
+    eval_p.add_argument("--out-dir", type=str, default="", help="Output run directory (defaults to outputs/eval/runs/<ts>)")
+    eval_p.add_argument("--frozen-rag", action="store_true", help="Use frozen-RAG (cache retrieved context per question)")
+    eval_p.add_argument("--live-rag", action="store_true", help="Use live retrieval timing (default if neither is set)")
+    eval_p.add_argument("--max-items", type=int, default=None, help="Limit number of eval items")
+    eval_p.add_argument("--warmup", type=int, default=1, help="Warmup prompts per variant")
+    eval_p.add_argument("--seed", type=int, default=None, help="Random seed")
+    eval_p.add_argument("--auto-index", action="store_true", help="Automatically build the Chroma index if missing (for RAG variants)")
+    eval_p.set_defaults(fn=cmd_evaluate)
 
     args = ap.parse_args()
     if getattr(args, "debug", False):
