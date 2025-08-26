@@ -8,6 +8,12 @@ from typing import Callable, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
+# Singleton guards for background services
+_HTTP_SERVER_LOCK = threading.Lock()
+_HTTP_SERVER_THREAD: Optional[threading.Thread] = None
+_SCHEDULER_LOCK = threading.Lock()
+_SCHEDULER_THREAD: Optional[threading.Thread] = None
+
 # Utilities for last-run tracking
 
 
@@ -196,11 +202,23 @@ def start_http_server(cfg, on_complete: Optional[Callable[[], None]] = None) -> 
             _UpdateHandler.on_complete = on_complete
             logger.info("HTTP update server on http://%s:%s (POST /update)", host, port)
             server.serve_forever()
+        except OSError as e:
+            # Address already in use -> assume an existing server is running; avoid noisy errors
+            if getattr(e, "errno", None) in (48, 98):
+                logger.info("HTTP update server already bound on http://%s:%s; skipping start", host, port)
+            else:
+                logger.exception("HTTP server failed: %s", e)
         except Exception as e:
             logger.exception("HTTP server failed: %s", e)
 
-    th = threading.Thread(target=_srv, daemon=True)
-    th.start()
+    global _HTTP_SERVER_THREAD
+    with _HTTP_SERVER_LOCK:
+        if _HTTP_SERVER_THREAD and _HTTP_SERVER_THREAD.is_alive():
+            logger.info("HTTP update server thread already running; skipping start")
+            return
+        th = threading.Thread(target=_srv, daemon=True)
+        _HTTP_SERVER_THREAD = th
+        th.start()
 
 
 def start_scheduler(cfg, on_complete: Optional[Callable[[], None]] = None) -> None:
@@ -230,8 +248,14 @@ def start_scheduler(cfg, on_complete: Optional[Callable[[], None]] = None) -> No
                 sleep_sec = int(min(3600, max(60, rem)))
             time.sleep(sleep_sec)
 
-    th = threading.Thread(target=_loop, daemon=True)
-    th.start()
+    global _SCHEDULER_THREAD
+    with _SCHEDULER_LOCK:
+        if _SCHEDULER_THREAD and _SCHEDULER_THREAD.is_alive():
+            logger.info("Daily scheduler already running; skipping start")
+            return
+        th = threading.Thread(target=_loop, daemon=True)
+        _SCHEDULER_THREAD = th
+        th.start()
 
 
 def start_background_services(cfg, on_complete: Optional[Callable[[], None]] = None) -> None:

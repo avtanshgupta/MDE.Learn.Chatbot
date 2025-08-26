@@ -168,29 +168,89 @@ class ModelRunner:
         prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         logger.debug("Chat template applied. Prompt length=%d", len(prompt))
 
-        gen_kwargs = {
-            "temp": self.temperature,
+        # Build kwargs with compatibility for different mlx_lm versions.
+        # Prefer 'temperature'; fall back to 'temp' if needed.
+        base_kwargs = {
             "top_p": self.top_p,
             "max_tokens": self.max_tokens,
         }
-        logger.debug("Generation kwargs: %s", gen_kwargs)
+        logger.debug("Base generation kwargs (no temperature): %s", base_kwargs)
+
+        def call_generate(streaming: bool):
+            import re
+            # Start with common kwargs; we'll dynamically drop unsupported ones.
+            active_kwargs = {
+                "temperature": self.temperature,
+                "top_p": self.top_p,
+                "max_tokens": self.max_tokens,
+            }
+            if streaming:
+                active_kwargs["stream"] = True
+
+            while True:
+                try:
+                    result = mlx_generate(
+                        self.model,
+                        self.tokenizer,
+                        prompt=prompt,
+                        **active_kwargs,
+                    )
+                    is_stream = bool(active_kwargs.get("stream", False))
+                    return result, is_stream
+                except TypeError as e:
+                    msg = str(e)
+                    logger.debug("mlx_lm.generate TypeError: %s; kwargs=%s", msg, active_kwargs)
+                    # Remove unexpected kwargs as reported by error message
+                    m = re.search(r"unexpected keyword argument '([^']+)'", msg)
+                    if m:
+                        bad = m.group(1)
+                        if bad in active_kwargs:
+                            logger.debug("Removing unsupported kwarg: %s", bad)
+                            active_kwargs.pop(bad)
+                            continue
+                    # Try max_new_tokens in place of max_tokens
+                    if "max_tokens" in active_kwargs:
+                        val = active_kwargs.pop("max_tokens")
+                        active_kwargs["max_new_tokens"] = val
+                        logger.debug("Switched to 'max_new_tokens'")
+                        continue
+                    # If 'stream' likely unsupported, drop it and retry non-streaming
+                    if "stream" in active_kwargs:
+                        logger.debug("Dropping 'stream' and retrying non-streaming")
+                        active_kwargs.pop("stream", None)
+                        continue
+                    # If nothing else helps, drop optional sampling args
+                    dropped = False
+                    for k in ("temperature", "top_p"):
+                        if k in active_kwargs:
+                            logger.debug("Dropping optional kwarg: %s", k)
+                            active_kwargs.pop(k)
+                            dropped = True
+                    if dropped:
+                        continue
+                    logger.exception("mlx_lm.generate failed and no further fallbacks available")
+                    raise
 
         if stream and self.use_streaming:
             logger.info("Starting streaming generation...")
 
             def streamer():
-                try:
-                    for token in mlx_generate(self.model, self.tokenizer, prompt=prompt, stream=True, **gen_kwargs):
+                res, is_stream = call_generate(streaming=True)
+                if is_stream and not isinstance(res, str):
+                    for token in res:
                         yield token
-                except TypeError:
-                    logger.debug("'stream' kw not supported by mlx_lm.generate; falling back to non-streaming")
-                    text = mlx_generate(self.model, self.tokenizer, prompt=prompt, **gen_kwargs)
-                    yield text
+                else:
+                    yield res
 
             return streamer(), sources
         else:
             logger.info("Starting non-streaming generation...")
-            text = mlx_generate(self.model, self.tokenizer, prompt=prompt, **gen_kwargs)
+            res, is_stream = call_generate(streaming=False)
+            # Ensure we produce a single full text string
+            if is_stream and not isinstance(res, str):
+                text = "".join(list(res))
+            else:
+                text = res
             logger.debug("Non-streaming generation complete. Text length=%d", len(text))
 
             def single():
