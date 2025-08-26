@@ -18,7 +18,7 @@ crawl:
   user_agent: MDE-Learn-Chatbot/1.0 (+https://github.com/avtanshgupta/MDE.Learn.Chatbot)
   max_pages: 50000
   request_timeout_sec: 20
-  sleep_between_requests_sec: 0.2
+  sleep_between_requests_sec: 0.1
   respect_robots_txt: true
   same_language_only: true
   include_filetypes: [html]

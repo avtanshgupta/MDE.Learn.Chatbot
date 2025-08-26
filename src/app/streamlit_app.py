@@ -154,32 +154,29 @@ st.caption("Grounded on learn.microsoft.com MDE docs with optional LoRA fine-tun
 st.markdown(
     """
     <style>
-      /* Hide chat avatars from Streamlit's chat_message */
-      [data-testid="stChatMessageAvatar"], .st-chat-message-avatar { display: none !important; }
+      /* Show chat avatars as small icons */
+      [data-testid="stChatMessageAvatar"], .st-chat-message-avatar { display: flex !important; width: 24px; height: 24px; align-items: center; justify-content: center; }
+      [data-testid="stChatMessageAvatar"] img, .st-chat-message-avatar img { width: 22px; height: 22px; object-fit: contain; }
 
-      /* Remove any background on chat rows */
-      [data-testid="stChatMessage"] { background: transparent !important; box-shadow: none !important; }
+      /* Remove any background on chat rows and force neutral alignment */
+      [data-testid="stChatMessage"] { background: transparent !important; box-shadow: none !important; justify-content: flex-start !important; align-items: flex-start !important; }
+      [data-testid="stChatMessageContent"] { align-items: flex-start !important; padding: 0 !important; }
 
       /* Add bottom padding so content isn't hidden behind the fixed chat input */
       .block-container { padding-bottom: 6rem; }
 
-      /* Right-align user message row */
-      .user-row { display: flex; justify-content: flex-end; }
+      /* Reduce default vertical gaps between elements in main container and headers */
+      .block-container [data-testid="stVerticalBlock"] { gap: 0.25rem !important; }
+      .block-container h2 { margin: 0.25rem 0 !important; }
 
-      /* Bubble styling for user questions (right aligned) */
-      .user-bubble {
-        display: inline-block;
-        background: #E6F0FF;
-        color: #0B2E78;
-        padding: 10px 14px;
-        border-radius: 18px;
-        max-width: 85%;
-        word-wrap: break-word;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.06);
-      }
 
       /* Optional limit for assistant text width to improve readability */
-      .assistant-text { max-width: 85%; }
+      .assistant-text { max-width: 85%; line-height: 1.35; }
+
+      /* Compact spacing between messages and paragraphs */
+      [data-testid="stChatMessage"] { margin-bottom: 0.25rem !important; padding-top: 0 !important; padding-bottom: 0 !important; }
+      .stMarkdown p { margin: 0.15rem 0 !important; }
+      .assistant-text { margin: 2px 0 !important; }
 
       /* Small spinner ring for generating state inside assistant message */
       .spinner-ring {
@@ -234,6 +231,10 @@ try:
 except Exception as e:
     print(f"[app.app] Pre-warm failed: {e}")
 
+def strip_retrieval_context(text: str) -> str:
+    import re
+    return re.sub(r"(?:^|\n)Context:.*?(?:\n\s*\n|Question:)", "\n", text, flags=re.IGNORECASE | re.DOTALL)
+
 # Chat UI
 if "history" not in st.session_state:
     print("[app.app] Initializing chat history")
@@ -252,11 +253,11 @@ if not st.session_state.get("inflight", False):
     print(f"[app.app] Rendering history with {len(st.session_state['history'])} turn(s)")
     for turn in st.session_state["history"]:
         if turn["role"] == "user":
-            # Render user question on the left (use assistant role to avoid right alignment)
-            with st.chat_message("assistant"):
-                st.markdown(f"<div class='user-bubble'>{turn['content']}</div>", unsafe_allow_html=True)
+            # Render user message with unified alignment and style
+            with st.chat_message("user", avatar="🙋"):
+                st.markdown(f"<div class='assistant-text'>{turn['content']}</div>", unsafe_allow_html=True)
         else:
-            with st.chat_message("assistant"):
+            with st.chat_message("assistant", avatar="🤖"):
                 st.markdown(f"<div class='assistant-text'>{turn['content']}</div>", unsafe_allow_html=True)
                 sources: List[Dict[str, Any]] = turn.get("sources", [])
                 if sources:
@@ -289,9 +290,9 @@ if st.session_state.get("pending_msg"):
     print(f"[app.app] Submit clicked. Mode={st.session_state['mode']}. User message length={len(msg)}")
     st.session_state["history"].append({"role": "user", "content": msg})
 
-    # Show the submitted user question on the left
-    with st.chat_message("assistant"):
-        st.markdown(f"<div class='user-bubble'>{msg}</div>", unsafe_allow_html=True)
+    # Show the submitted user message with unified alignment and style
+    with st.chat_message("user", avatar="🙋"):
+        st.markdown(f"<div class='assistant-text'>{msg}</div>", unsafe_allow_html=True)
     components.html("<script>window.scrollTo(0, document.body.scrollHeight);</script>", height=0)
 
     runner = get_runner(st.session_state["mode"])
@@ -301,7 +302,7 @@ if st.session_state.get("pending_msg"):
     try:
         prior_history = st.session_state["history"][:-1]  # exclude current user turn
         print("[app.app] Calling runner.generate(stream=True) with context")
-        with st.chat_message("assistant"):
+        with st.chat_message("assistant", avatar="🤖"):
             spinner_ph = st.empty()
             text_ph = st.empty()
             spinner_ph.markdown("<div class='spinner-ring'></div>", unsafe_allow_html=True)
@@ -312,7 +313,8 @@ if st.session_state.get("pending_msg"):
                 tok_count += 1
                 if tok_count % 50 == 0:
                     print(f"[app.app] Streamed {tok_count} token chunks so far")
-                text_ph.markdown(f"<div class='assistant-text'>{out_text}</div>", unsafe_allow_html=True)
+                display_text = strip_retrieval_context(out_text)
+                text_ph.markdown(f"<div class='assistant-text'>{display_text}</div>", unsafe_allow_html=True)
 
             spinner_ph.empty()
 
@@ -327,7 +329,8 @@ if st.session_state.get("pending_msg"):
 
         # Finalize assistant message in history
         print(f"[app.app] Streaming complete. Total token chunks={tok_count}. Output length={len(out_text)}")
-        st.session_state["history"].append({"role": "assistant", "content": out_text, "sources": sources})
+        sanitized_out = strip_retrieval_context(out_text)
+        st.session_state["history"].append({"role": "assistant", "content": sanitized_out, "sources": sources})
         components.html("<script>window.scrollTo(0, document.body.scrollHeight);</script>", height=0)
     except Exception as e:
         print(f"[app.app] Inference failed: {e}")
