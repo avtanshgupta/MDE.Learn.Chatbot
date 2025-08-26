@@ -239,6 +239,5 @@ pip freeze > requirements-lock.txt
 - RAG — https://arxiv.org/abs/2005.11401
 - Chroma — https://docs.trychroma.com/
 - Sentence-Transformers — https://www.sbert.net/ • https://github.com/UKPLab/sentence-transformers
-- Qwen2.5-7B-Instruct — https://huggingface.co/Qwen/Qwen2.5-7B-Instruct
 - Qwen2.5-7B-Instruct-4bit (MLX) — https://huggingface.co/mlx-community/Qwen2.5-7B-Instruct-4bit
 - Streamlit — https://streamlit.io/ • https://docs.streamlit.io/
