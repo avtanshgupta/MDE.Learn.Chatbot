@@ -34,11 +34,15 @@ pip install -r requirements.txt
 
 ## Quickstart
 
-One-time setup with finetune + merge, then launch the app:
+One-time setup with finetune + merge (run once):
 ```bash
 chmod +x scripts/setup_initial.sh scripts/finetune.sh
 ./scripts/setup_initial.sh
 ./scripts/finetune.sh --merge      # one-time finetune + merge
+```
+
+Launch the app:
+```bash
 python -m streamlit run src/app/streamlit_app.py
 ```
 
