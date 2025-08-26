@@ -32,15 +32,17 @@ def build_messages(system_prompt: str, user_prompt: str) -> List[Dict[str, str]]
 
 
 class ModelRunner:
-    def __init__(self, mode: Optional[str] = None) -> None:
+    def __init__(self, mode: Optional[str] = None, force_base: bool = False) -> None:
         """
         mode: "rag" | "ft" | "rag_ft"
+        force_base: if True, ignore adapters/merged and load base weights
         """
-        logger.info("Initializing ModelRunner with mode=%s", mode)
+        logger.info("Initializing ModelRunner with mode=%s force_base=%s", mode, force_base)
         cfg = load_config()
         self.cfg = cfg
         self.mode = mode or cfg["app"]["mode"]
-        logger.info("Effective mode=%s", self.mode)
+        self.force_base = bool(force_base)
+        logger.info("Effective mode=%s (force_base=%s)", self.mode, self.force_base)
 
         self.model_id = cfg["model"]["base_id"]
         self.adapter_dir = cfg["finetune"]["out_dir"]
@@ -86,7 +88,7 @@ class ModelRunner:
         adapter: Optional[str] = None
         model_path_or_id = self.model_id
 
-        if self.mode in ("ft", "rag_ft"):
+        if (self.mode in ("ft", "rag_ft")) and (not self.force_base):
             # Prefer loading adapter live if present
             if os.path.isdir(self.adapter_dir) and os.listdir(self.adapter_dir):
                 adapter = self.adapter_dir
@@ -119,6 +121,46 @@ class ModelRunner:
             logger.exception("Model load failed: %s", e)
             raise
         return model, tokenizer
+
+    def _candidate_gen_kwargs(self) -> List[Dict[str, float]]:
+        """
+        Return a list of compatible kwargs to try with mlx_lm.generate across versions.
+        Tries multiple parameter names/orderings for temperature/top_p/max_tokens.
+        """
+        return [
+            {"temp": self.temperature, "top_p": self.top_p, "max_tokens": self.max_tokens},
+            {"temperature": self.temperature, "top_p": self.top_p, "max_tokens": self.max_tokens},
+            {"top_p": self.top_p, "max_tokens": self.max_tokens},
+            {"max_tokens": self.max_tokens},
+            {},
+        ]
+
+    def _nonstream_generate_compat(self, prompt: str) -> str:
+        """
+        Best-effort non-streaming generation compatible with multiple mlx_lm versions.
+        """
+        for kw in self._candidate_gen_kwargs():
+            try:
+                return mlx_generate(self.model, self.tokenizer, prompt=prompt, **kw)
+            except TypeError:
+                continue
+        # Last resort (no kwargs)
+        return mlx_generate(self.model, self.tokenizer, prompt=prompt)
+
+    def _stream_generate_compat(self, prompt: str):
+        """
+        Best-effort streaming generation; falls back to non-streaming if unsupported.
+        """
+        for kw in self._candidate_gen_kwargs():
+            try:
+                for token in mlx_generate(self.model, self.tokenizer, prompt=prompt, stream=True, **kw):
+                    yield token
+                return
+            except TypeError:
+                continue
+        # Fallback to non-streaming if streaming unsupported in this mlx_lm version
+        text = self._nonstream_generate_compat(prompt)
+        yield text
 
     def _build_rag_prompt(self, question: str) -> Tuple[str, List[Dict[str, any]]]:
         """
@@ -154,13 +196,10 @@ class ModelRunner:
             logger.debug("Mode=rag_ft; building RAG prompt for fine-tuned model")
             return self._build_rag_prompt(question)
 
-    def generate(self, question: str, stream: bool = True) -> Tuple[Iterator[str], List[Dict[str, any]]]:
+    def generate_from_user_prompt(self, user_prompt: str, sources: Optional[List[Dict[str, any]]] = None, stream: bool = True) -> Tuple[Iterator[str], List[Dict[str, any]]]:
         """
-        Return an iterator over generated text chunks and the list of sources (for RAG).
+        Generate from a prepared user_prompt and provided sources (for RAG).
         """
-        q_preview = question.replace("\n", " ")[:120]
-        logger.info("Generate called. Question preview: %s%s", q_preview, "..." if len(question) > 120 else "")
-        user_prompt, sources = self._compose_user_prompt(question)
         messages = build_messages(self.system_prompt, user_prompt)
         logger.debug("Messages prepared count=%d", len(messages))
 
@@ -178,22 +217,22 @@ class ModelRunner:
         if stream and self.use_streaming:
             logger.info("Starting streaming generation...")
 
-            def streamer():
-                try:
-                    for token in mlx_generate(self.model, self.tokenizer, prompt=prompt, stream=True, **gen_kwargs):
-                        yield token
-                except TypeError:
-                    logger.debug("'stream' kw not supported by mlx_lm.generate; falling back to non-streaming")
-                    text = mlx_generate(self.model, self.tokenizer, prompt=prompt, **gen_kwargs)
-                    yield text
-
-            return streamer(), sources
+            return self._stream_generate_compat(prompt), (sources or [])
         else:
             logger.info("Starting non-streaming generation...")
-            text = mlx_generate(self.model, self.tokenizer, prompt=prompt, **gen_kwargs)
+            text = self._nonstream_generate_compat(prompt)
             logger.debug("Non-streaming generation complete. Text length=%d", len(text))
 
             def single():
                 yield text
 
-            return single(), sources
+            return single(), (sources or [])
+
+    def generate(self, question: str, stream: bool = True) -> Tuple[Iterator[str], List[Dict[str, any]]]:
+        """
+        Return an iterator over generated text chunks and the list of sources (for RAG).
+        """
+        q_preview = question.replace("\n", " ")[:120]
+        logger.info("Generate called. Question preview: %s%s", q_preview, "..." if len(question) > 120 else "")
+        user_prompt, sources = self._compose_user_prompt(question)
+        return self.generate_from_user_prompt(user_prompt, sources, stream=stream)
