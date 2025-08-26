@@ -4,6 +4,7 @@ import time
 from typing import Any, Dict, List
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 # Ensure project root on sys.path when running "streamlit run src/app/streamlit_app.py"
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
@@ -149,6 +150,53 @@ with st.sidebar:
 st.title("Microsoft Defender for Endpoint Chatbot")
 st.caption("Grounded on learn.microsoft.com MDE docs with optional LoRA fine-tuning (MLX) and RAG.")
 
+# Chat UI styles (scrollable Q&A, no avatars, bubbles, spinner)
+st.markdown(
+    """
+    <style>
+      /* Hide chat avatars from Streamlit's chat_message */
+      [data-testid="stChatMessageAvatar"], .st-chat-message-avatar { display: none !important; }
+
+      /* Remove any background on chat rows */
+      [data-testid="stChatMessage"] { background: transparent !important; box-shadow: none !important; }
+
+      /* Add bottom padding so content isn't hidden behind the fixed chat input */
+      .block-container { padding-bottom: 6rem; }
+
+      /* Right-align user message row */
+      .user-row { display: flex; justify-content: flex-end; }
+
+      /* Bubble styling for user questions (right aligned) */
+      .user-bubble {
+        display: inline-block;
+        background: #E6F0FF;
+        color: #0B2E78;
+        padding: 10px 14px;
+        border-radius: 18px;
+        max-width: 85%;
+        word-wrap: break-word;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+      }
+
+      /* Optional limit for assistant text width to improve readability */
+      .assistant-text { max-width: 85%; }
+
+      /* Small spinner ring for generating state inside assistant message */
+      .spinner-ring {
+        width: 18px;
+        height: 18px;
+        border: 3px solid #e0e0e0;
+        border-top-color: #4A90E2;
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+        margin: 4px 0 8px 0;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # Cache a runner per mode to avoid reloading on every rerun
 if "runners" not in st.session_state:
     print("[app.app] Initializing runners cache in session_state")
@@ -192,66 +240,103 @@ if "history" not in st.session_state:
     st.session_state["history"] = []  # list of {"role": "user"/"assistant", "content": str, "sources": [...]}
 else:
     print(f"[app.app] Chat history present with {len(st.session_state['history'])} turn(s)")
+if "inflight" not in st.session_state:
+    st.session_state["inflight"] = False
+if "pending_msg" not in st.session_state:
+    st.session_state["pending_msg"] = None
 
-# Input
-with st.form(key="chat-form", clear_on_submit=False):
-    user_msg = st.text_area("Ask a question about Microsoft Defender for Endpoint:", height=120, placeholder="e.g. How do I onboard macOS devices to MDE?")
-    submitted = st.form_submit_button("Send")
 
-# Render existing history
-print(f"[app.app] Rendering history with {len(st.session_state['history'])} turn(s)")
-for turn in st.session_state["history"]:
-    if turn["role"] == "user":
-        st.markdown(f"**You:** {turn['content']}")
-    else:
-        st.markdown("**Assistant:**")
-        st.write(turn["content"])
-        sources: List[Dict[str, Any]] = turn.get("sources", [])
-        if sources:
-            with st.expander("Sources"):
-                for s in sources:
-                    title = s.get("title") or "Untitled"
-                    url = s.get("url") or ""
-                    rank = s.get("rank")
-                    dist = s.get("distance")
-                    st.markdown(f"- [{rank}] [{title}]({url}) (distance={dist})")
+# Q&A Block (scrollable via page scroll; input fixed by st.chat_input)
+st.subheader("Chat")
+if not st.session_state.get("inflight", False):
+    print(f"[app.app] Rendering history with {len(st.session_state['history'])} turn(s)")
+    for turn in st.session_state["history"]:
+        if turn["role"] == "user":
+            # Render user question on the left (use assistant role to avoid right alignment)
+            with st.chat_message("assistant"):
+                st.markdown(f"<div class='user-bubble'>{turn['content']}</div>", unsafe_allow_html=True)
+        else:
+            with st.chat_message("assistant"):
+                st.markdown(f"<div class='assistant-text'>{turn['content']}</div>", unsafe_allow_html=True)
+                sources: List[Dict[str, Any]] = turn.get("sources", [])
+                if sources:
+                    with st.expander("Sources"):
+                        for s in sources:
+                            title = s.get("title") or "Untitled"
+                            url = s.get("url") or ""
+                            rank = s.get("rank")
+                            dist = s.get("distance")
+                            st.markdown(f"- [{rank}] [{title}]({url}) (distance={dist})")
+
+components.html("<script>window.scrollTo(0, document.body.scrollHeight);</script>", height=0)
+
+# Input bar (fixed at bottom by Streamlit; Enter submits, Shift+Enter = newline)
+msg = st.chat_input("Ask a question about Microsoft Defender for Endpoint:")
 
 # Handle new query
-if submitted and user_msg and user_msg.strip():
-    msg = user_msg.strip()
+if msg:
+    # Set pending state and rerun so the history block won't render during generation
+    st.session_state["pending_msg"] = msg
+    st.session_state["inflight"] = True
+    try:
+        st.experimental_rerun()
+    except Exception:
+        pass
+
+# Handle pending message (generation run without showing full history)
+if st.session_state.get("pending_msg"):
+    msg = st.session_state["pending_msg"]
     print(f"[app.app] Submit clicked. Mode={st.session_state['mode']}. User message length={len(msg)}")
     st.session_state["history"].append({"role": "user", "content": msg})
-    st.markdown(f"**You:** {msg}")
+
+    # Show the submitted user question on the left
+    with st.chat_message("assistant"):
+        st.markdown(f"<div class='user-bubble'>{msg}</div>", unsafe_allow_html=True)
+    components.html("<script>window.scrollTo(0, document.body.scrollHeight);</script>", height=0)
 
     runner = get_runner(st.session_state["mode"])
-    st.markdown("**Assistant:**")
-    placeholder = st.empty()
     out_text = ""
     tok_count = 0
 
     try:
-        print("[app.app] Calling runner.generate(stream=True)")
-        stream, sources = runner.generate(msg, stream=True)
-        for tok in stream:
-            out_text += tok
-            tok_count += 1
-            if tok_count % 50 == 0:
-                print(f"[app.app] Streamed {tok_count} token chunks so far")
-            placeholder.markdown(out_text)
+        prior_history = st.session_state["history"][:-1]  # exclude current user turn
+        print("[app.app] Calling runner.generate(stream=True) with context")
+        with st.chat_message("assistant"):
+            spinner_ph = st.empty()
+            text_ph = st.empty()
+            spinner_ph.markdown("<div class='spinner-ring'></div>", unsafe_allow_html=True)
+
+            stream, sources = runner.generate(msg, stream=True, history=prior_history)
+            for tok in stream:
+                out_text += tok
+                tok_count += 1
+                if tok_count % 50 == 0:
+                    print(f"[app.app] Streamed {tok_count} token chunks so far")
+                text_ph.markdown(f"<div class='assistant-text'>{out_text}</div>", unsafe_allow_html=True)
+
+            spinner_ph.empty()
+
+            if sources:
+                with st.expander("Sources"):
+                    for s in sources:
+                        title = s.get("title") or "Untitled"
+                        url = s.get("url") or ""
+                        rank = s.get("rank")
+                        dist = s.get("distance")
+                        st.markdown(f"- [{rank}] [{title}]({url}) (distance={dist})")
+
+        # Finalize assistant message in history
         print(f"[app.app] Streaming complete. Total token chunks={tok_count}. Output length={len(out_text)}")
-        # Finalize assistant message
         st.session_state["history"].append({"role": "assistant", "content": out_text, "sources": sources})
-        if sources:
-            print(f"[app.app] Rendering {len(sources)} source(s)")
-            with st.expander("Sources"):
-                for s in sources:
-                    title = s.get("title") or "Untitled"
-                    url = s.get("url") or ""
-                    rank = s.get("rank")
-                    dist = s.get("distance")
-                    st.markdown(f"- [{rank}] [{title}]({url}) (distance={dist})")
-        else:
-            print("[app.app] No sources returned")
+        components.html("<script>window.scrollTo(0, document.body.scrollHeight);</script>", height=0)
     except Exception as e:
         print(f"[app.app] Inference failed: {e}")
         st.error(f"Inference failed: {e}")
+    finally:
+        # Clear inflight and pending, allowing full history to render on next rerun
+        st.session_state["pending_msg"] = None
+        st.session_state["inflight"] = False
+        try:
+            st.experimental_rerun()
+        except Exception:
+            pass

@@ -31,6 +31,25 @@ def build_messages(system_prompt: str, user_prompt: str) -> List[Dict[str, str]]
     return messages
 
 
+def build_chat_messages(system_prompt: str, history: Optional[List[Dict[str, str]]], latest_user: str) -> List[Dict[str, str]]:
+    """
+    Build chat messages including prior history plus the latest user turn.
+    Only 'user' and 'assistant' roles are kept from history.
+    """
+    messages: List[Dict[str, str]] = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    # Keep a reasonable tail of history to preserve context while bounding length
+    if history:
+        tail = history[-16:]
+        for m in tail:
+            role = m.get("role", "")
+            content = m.get("content", "")
+            if role in ("user", "assistant") and content:
+                messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": latest_user})
+    return messages
+
 class ModelRunner:
     def __init__(self, mode: Optional[str] = None) -> None:
         """
@@ -154,14 +173,15 @@ class ModelRunner:
             logger.debug("Mode=rag_ft; building RAG prompt for fine-tuned model")
             return self._build_rag_prompt(question)
 
-    def generate(self, question: str, stream: bool = True) -> Tuple[Iterator[str], List[Dict[str, any]]]:
+    def generate(self, question: str, stream: bool = True, history: Optional[List[Dict[str, str]]] = None) -> Tuple[Iterator[str], List[Dict[str, any]]]:
         """
         Return an iterator over generated text chunks and the list of sources (for RAG).
+        Includes prior chat history for conversational context.
         """
         q_preview = question.replace("\n", " ")[:120]
         logger.info("Generate called. Question preview: %s%s", q_preview, "..." if len(question) > 120 else "")
         user_prompt, sources = self._compose_user_prompt(question)
-        messages = build_messages(self.system_prompt, user_prompt)
+        messages = build_chat_messages(self.system_prompt, history, user_prompt)
         logger.debug("Messages prepared count=%d", len(messages))
 
         # Prefer using chat template for Qwen2.5
